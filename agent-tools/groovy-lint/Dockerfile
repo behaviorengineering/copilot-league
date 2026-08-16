@@ -61,11 +61,14 @@ RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     USERNAME=$(cat /run/secrets/username | cut -d@ -f1) && \
     TOKEN=$(cat /run/secrets/token) && \
-    npm install -g npm-groovy-lint \
-        --registry "https://${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}" \
-        "--//${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}:username=${USERNAME}" \
-        "--//${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}:_password=$(echo -n "${TOKEN}" | base64)" \
-        "--//${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}:always-auth=true" && \
+    AUTH_PATH="//${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}" && \
+    printf '%s\n' \
+      "registry=https://${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}" \
+      "${AUTH_PATH}:username=${USERNAME}" \
+      "${AUTH_PATH}:_password=$(echo -n "${TOKEN}" | base64 | tr -d '\n')" \
+      "${AUTH_PATH}:always-auth=true" \
+      > /root/.npmrc && \
+    npm install -g npm-groovy-lint && \
     rm -f /root/.npmrc && \
     rm -rf /root/.npm
 

@@ -14,6 +14,7 @@ _FILES_HOST: Final = "https://files.pythonhosted.org"
 _NPM_HOST: Final = "https://registry.npmjs.org"
 _PYPI_SIMPLE: Final = "https://pypi.org/simple"
 _NPM_REGISTRY: Final = "https://registry.npmjs.org"
+_UPSTREAM_UA: Final = "copilot-league-corp-double/1.0"
 
 
 def rewrite_body(body: str, public_origin: str) -> str:
@@ -27,6 +28,9 @@ def rewrite_body(body: str, public_origin: str) -> str:
         Body with file URLs pointed at ``/pypi-files`` or ``/npm-tarballs``.
     """
     rewritten = body.replace(_FILES_HOST, f"{public_origin}/pypi-files")
+    rewritten = rewritten.replace(
+        "http://registry.npmjs.org", f"{public_origin}/npm-tarballs"
+    )
     return rewritten.replace(_NPM_HOST, f"{public_origin}/npm-tarballs")
 
 
@@ -46,6 +50,26 @@ def upstream_url(path: str) -> str | None:
         rest = path[len(_NPM_PREFIX) :]
         return f"{_NPM_REGISTRY}/{rest}"
     return None
+
+
+def _upstream_request(
+    url: str, method: str, accept: str | None
+) -> urllib.request.Request:
+    """Build the public-index request Caddy cannot issue itself.
+
+    Args:
+        url: Absolute upstream URL.
+        method: HTTP method from the client.
+        accept: Optional Accept header from npm/pip.
+
+    Returns:
+        Prepared request with a CDN-accepted User-Agent.
+    """
+    request = urllib.request.Request(url, method=method)
+    request.add_header("User-Agent", _UPSTREAM_UA)
+    if accept:
+        request.add_header("Accept", accept)
+    return request
 
 
 class RewriteHandler(BaseHTTPRequestHandler):
@@ -68,10 +92,7 @@ class RewriteHandler(BaseHTTPRequestHandler):
         if not url or not public_origin:
             self.send_error(404)
             return
-        request = urllib.request.Request(url, method=self.command)
-        accept = self.headers.get("Accept")
-        if accept:
-            request.add_header("Accept", accept)
+        request = _upstream_request(url, self.command, self.headers.get("Accept"))
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 raw = response.read()
@@ -94,13 +115,12 @@ class RewriteHandler(BaseHTTPRequestHandler):
 
 
 def serve(port: int = 0) -> ThreadingHTTPServer:
-    """Bind the rewriter on localhost.
+    """Bind the rewriter on all interfaces so Docker host-gateway can reach it.
 
     Args:
         port: TCP port. ``0`` picks an ephemeral port.
 
     Returns:
-        Started server (daemon thread already serving).
+        Listening server (caller starts ``serve_forever``).
     """
-    server = ThreadingHTTPServer(("127.0.0.1", port), RewriteHandler)
-    return server
+    return ThreadingHTTPServer(("0.0.0.0", port), RewriteHandler)

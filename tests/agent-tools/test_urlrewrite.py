@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from urlrewrite import rewrite_body, upstream_url
+from urlrewrite import rewrite_body, serve, upstream_url
 
 
 def test_rewrite_body_rewrites_pypi_and_npm_cdns() -> None:
@@ -30,3 +30,19 @@ def test_upstream_url_maps_pypi_simple_and_npm() -> None:
         == "https://registry.npmjs.org/npm-groovy-lint"
     )
     assert upstream_url("/nope") is None
+
+
+def test_rewrite_body_rewrites_http_npm_registry() -> None:
+    """http://registry.npmjs.org packument tarball URLs also move onto the vhost."""
+    origin = "https://artifactory.example.com:18443"
+    out = rewrite_body("http://registry.npmjs.org/pkg/-/pkg.tgz", origin)
+    assert out == f"{origin}/npm-tarballs/pkg/-/pkg.tgz"
+
+
+def test_serve_listens_on_all_interfaces() -> None:
+    """Linux Docker host-gateway cannot reach a 127.0.0.1-only bind."""
+    server = serve(0)
+    try:
+        assert server.server_address[0] == "0.0.0.0"
+    finally:
+        server.server_close()

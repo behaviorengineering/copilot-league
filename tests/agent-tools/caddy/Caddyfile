@@ -74,10 +74,12 @@
 		}
 	}
 
-	handle /artifactory/api/npm/npm-virtual/* {
+	handle /artifactory/api/npm/npm-virtual* {
 		import corp_auth
 		reverse_proxy {$REWRITE_UPSTREAM} {
 			header_up Authorization ""
+			header_up Host {http.reverse_proxy.upstream.hostport}
+			flush_interval -1
 		}
 	}
 
