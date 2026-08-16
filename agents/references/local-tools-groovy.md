@@ -26,4 +26,4 @@ Corp build (default stage) needs `PACKAGE_REGISTRY_HOST`, `CORP_CA_CERT_URL`, `D
 - Corp JRE comes from `DEBIAN_REPO_PATH` after the CA is installed. Do not leave `default-jre-headless` on public Debian in the corp stage.
 - `default-jre-headless` is required — npm-groovy-lint calls a JVM via CodeNarc. Full JDK is not required.
 - NEVER use an Alpine base — the JRE package name and glibc assumptions differ.
-- Lint command flags (`--path`, `--files`, `--no-insight`, `--fix`) and Jenkinsfile validation are in the groovy-lint skill, not here.
+- Lint command flags (positional paths, `--ext`, `--no-insight`, `--fix`) and Jenkinsfile validation are in the groovy-lint skill, not here.

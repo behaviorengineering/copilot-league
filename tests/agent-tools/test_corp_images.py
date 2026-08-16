@@ -558,16 +558,15 @@ def test_groovy_lint_corp_runs(docker: str, groovy_lint_corp_image: str) -> None
         docker,
         groovy_lint_corp_image,
         [
-            "--path",
-            "/workspace",
-            "--files",
-            "ok.groovy",
+            "/workspace/ok.groovy",
             "--no-insight",
             "--failon",
             "error",
         ],
     )
-    assert result.returncode == 0, combined_output(result)
+    output = combined_output(result)
+    assert "bad.groovy" not in output, output
+    assert result.returncode == 0, output
 
 
 def test_groovy_lint_corp_fails_on_bad_fixture(
@@ -578,10 +577,7 @@ def test_groovy_lint_corp_fails_on_bad_fixture(
         docker,
         groovy_lint_corp_image,
         [
-            "--path",
-            "/workspace",
-            "--files",
-            "bad.groovy",
+            "/workspace/bad.groovy",
             "--no-insight",
             "--failon",
             "error",

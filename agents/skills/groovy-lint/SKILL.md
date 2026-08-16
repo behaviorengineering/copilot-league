@@ -82,40 +82,42 @@ $CONTAINER build "${TLS_FLAG[@]}" \
 
 Run all commands from the repository root. The workspace mounts at `/workspace` inside the container.
 
+Pass paths as positional arguments. Do not use `--path` / `--files` — current npm-groovy-lint ignores `--files` and then lints every default Groovy pattern under the directory.
+
 **Groovy lint — all stage and library files:**
 ```powershell
 # PowerShell (Windows)
 & $CONTAINER run --rm -v "${PWD}:/workspace" groovy-lint `
-    --path /workspace/.jenkins --files "**/*.groovy" --no-insight
+    --ext groovy /workspace/.jenkins --no-insight
 ```
 ```bash
 # bash (macOS / Linux)
 $CONTAINER run --rm -v "$(pwd):/workspace" groovy-lint \
-    --path /workspace/.jenkins --files '**/*.groovy' --no-insight
+    --ext groovy /workspace/.jenkins --no-insight
 ```
 
 **Groovy lint — all Jenkinsfiles:**
 ```powershell
 # PowerShell (Windows)
 & $CONTAINER run --rm -v "${PWD}:/workspace" groovy-lint `
-    --path /workspace/.jenkins/pipelines --files "**/*.Jenkinsfile" --no-insight
+    --ext Jenkinsfile /workspace/.jenkins/pipelines --no-insight
 ```
 ```bash
 # bash (macOS / Linux)
 $CONTAINER run --rm -v "$(pwd):/workspace" groovy-lint \
-    --path /workspace/.jenkins/pipelines --files '**/*.Jenkinsfile' --no-insight
+    --ext Jenkinsfile /workspace/.jenkins/pipelines --no-insight
 ```
 
 **Groovy lint — auto-fix mode:**
 ```powershell
 # PowerShell (Windows)
 & $CONTAINER run --rm -v "${PWD}:/workspace" groovy-lint `
-    --path /workspace/.jenkins --files "**/*.groovy" --fix --no-insight
+    --fix --ext groovy /workspace/.jenkins --no-insight
 ```
 ```bash
 # bash (macOS / Linux)
 $CONTAINER run --rm -v "$(pwd):/workspace" groovy-lint \
-    --path /workspace/.jenkins --files '**/*.groovy' --fix --no-insight
+    --fix --ext groovy /workspace/.jenkins --no-insight
 ```
 
 **Rules:**

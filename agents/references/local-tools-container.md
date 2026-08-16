@@ -280,7 +280,7 @@ Example (public groovy-lint, no secrets). Corp build: copy the exact command fro
 
 Example:
 ```powershell
-& $CONTAINER run --rm -v "${PWD}:/workspace" groovy-lint --path /workspace/.jenkins --files "**/*.groovy"
+& $CONTAINER run --rm -v "${PWD}:/workspace" groovy-lint --ext groovy /workspace/.jenkins --no-insight
 ```
 
 ---
