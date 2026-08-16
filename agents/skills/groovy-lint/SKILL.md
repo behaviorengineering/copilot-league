@@ -10,7 +10,9 @@ user-invocable: false
 
 Load when asked to lint `.groovy` files or Jenkinsfiles locally.
 
-MUST load [local-tools-container.md](../../references/local-tools-container.md) first. Run **Runtime Detection** and set `$AGENT_TOOLS` from **Path Prefix** before any container command.
+**Cited by:** `.github/agents/jenkins-coder.agent.md`
+
+MUST load [local-tools-container.md](../../references/local-tools-container.md) first. Run **Runtime Detection** and set `$AGENT_TOOLS` from **Path Prefix** before any container command. Then load [local-tools-groovy.md](../../references/local-tools-groovy.md) for image layout (public/corp stages, `node:lts-slim`, not `FROM local-agent-tool-base`).
 
 ## Scope
 
@@ -41,17 +43,19 @@ $CONTAINER images --format '{{.Repository}}' | grep -F groovy-lint
 
 ## Step 2 — Build the Image
 
-The `groovy-lint` image fetches the corporate CA cert from the package registry (no credentials needed for that step),
-then installs `npm-groovy-lint` from the corporate npm mirror using BuildKit secrets.
+The corp stage (default) bootstraps the CA from `CORP_CA_CERT_URL`, installs the JRE from `DEBIAN_REPO_PATH`, then installs `npm-groovy-lint` from the corporate npm mirror. All three steps use BuildKit secrets for registry credentials.
+
+This image is **not** `FROM local-agent-tool-base`. Do not build the base first for groovy-lint.
 
 Ensure `REGISTRY_USER` and `REGISTRY_TOKEN` are set in the shell before building.
-Pass `--build-arg` values from `agents/references/environment.md` (`.github/agents/references/environment.md` in a consuming project).
+Pass `--build-arg` values from `.github/agents/references/environment.md` (drop `.github/` in this library).
 
 ```powershell
 # PowerShell (Windows)
 & $CONTAINER build @TLS_FLAG `
     --build-arg PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST> `
     --build-arg CORP_CA_CERT_URL=<CORP_CA_CERT_URL> `
+    --build-arg DEBIAN_REPO_PATH=<DEBIAN_REPO_PATH> `
     --build-arg NPM_VIRTUAL_PATH=<NPM_VIRTUAL_PATH> `
     --secret id=username,env=REGISTRY_USER `
     --secret id=token,env=REGISTRY_TOKEN `
@@ -62,6 +66,7 @@ Pass `--build-arg` values from `agents/references/environment.md` (`.github/agen
 $CONTAINER build "${TLS_FLAG[@]}" \
     --build-arg PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST> \
     --build-arg CORP_CA_CERT_URL=<CORP_CA_CERT_URL> \
+    --build-arg DEBIAN_REPO_PATH=<DEBIAN_REPO_PATH> \
     --build-arg NPM_VIRTUAL_PATH=<NPM_VIRTUAL_PATH> \
     --secret id=username,env=REGISTRY_USER \
     --secret id=token,env=REGISTRY_TOKEN \
@@ -120,11 +125,11 @@ $CONTAINER run --rm -v "$(pwd):/workspace" groovy-lint \
 
 ## Step 4 — Validate Declarative Pipeline Structure
 
-Uses a local Jenkins container that exposes the `pipeline-model-converter` API. No authentication required — the container runs with the setup wizard disabled.
+Uses a local Jenkins container that exposes the `pipeline-model-converter` API. No authentication required — `init.groovy.d/disable-security.groovy` sets `NO_AUTHENTICATION`, unsecured authorization, and a null crumb issuer, and `JAVA_OPTS` disables the setup wizard.
 
 **Prerequisite — build the image (once):**
 
-Requires internet access to the Jenkins update center for plugin download. Re-run only when the Dockerfile changes.
+Requires internet access to Docker Hub (`jenkins/jenkins:lts-jdk17`) and the Jenkins update center (`updates.jenkins.io`) for plugin download. There is no corp stage. Re-run only when the Dockerfile changes.
 
 ```powershell
 # PowerShell (Windows)

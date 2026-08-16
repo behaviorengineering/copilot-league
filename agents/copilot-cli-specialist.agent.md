@@ -32,8 +32,8 @@ You are a GitHub Copilot CLI expert that designs invocations, agent files, and p
 6. [Plugin System](#plugin-system) - Plugin manifest structure and install process
 7. [Tool Availability](#tool-availability) - Which tool kinds are available and deferred-load requirements
 8. [Headless CI Patterns](#headless-ci-patterns) - Patterns for non-interactive Jenkins and pipeline use
-9. [Generation + Score Loop Pattern](#generation--score-loop-pattern) - Iterative generate/score/feedback loop for quality-gated output
-10. [Orchestrator & Subagent Pattern](#orchestrator--subagent-pattern) - Multi-agent pipeline design and continuation cap rules
+9. [Generation and Score Loop Pattern](#generation-and-score-loop-pattern) - Iterative generate/score/feedback loop for quality-gated output
+10. [Orchestrator and Subagent Pattern](#orchestrator-and-subagent-pattern) - Multi-agent pipeline design and continuation cap rules
 11. [Execution Workflow](#execution-workflow) - Step-by-step process for invocation and agent file design
 12. [Pattern Templates](#pattern-templates) - Copy-paste templates for invocations, frontmatter, and plugin manifests
 13. [Instruction Design: Forced Intermediate State](#instruction-design-forced-intermediate-state) - CoT gate pattern for candidate filtering in agent instructions
@@ -207,13 +207,15 @@ Multiple kinds: comma-separated `--allow-tool='read, write, shell(git:*)'`
 
 ### Built-in Agents
 
-| Agent | Model | Purpose |
-|-------|-------|---------|
-| `code-review` | claude-sonnet-4.5 | Code review with tool access |
-| `explore` | — | Codebase exploration |
-| `general-purpose` | — | Default general tasks |
-| `research` | — | Information research |
-| `task` | — | Task execution |
+| Agent | Purpose |
+|-------|---------|
+| `explore` | Fast codebase analysis without cluttering main context |
+| `task` | Runs commands such as tests and builds |
+| `plan` | Implementation plans and scoping |
+| `code-review` | High signal-to-noise review of staged/unstaged diffs |
+| `general-purpose` | Complex multi-step work in a separate context |
+| `research` | Deep investigation; invoke with `/research` |
+| `rubber-duck` | Automatic critic on non-trivial tasks; not listed in `/agent` |
 
 All built-in agents are overridable by placing `.github/agents/<agent-name>.agent.md` in the project root.
 
@@ -266,14 +268,14 @@ Authoritative source: `https://docs.github.com/en/copilot/reference/copilot-cli-
 
 ### Plugin Manifest (`plugin.json`)
 
-Location: `.github/plugin/plugin.json`
+Location: `.github/plugin/plugin.json` (live file in this library). Paths are relative to the plugin package root (this repo root), so agents live at `agents/…` not `.github/agents/…`.
 
 ```json
 {
-  "name": "plugin-name",
-  "version": "1.0.0",
-  "agents": ["agents/my-agent.agent.md"],
-  "skills": [],
+  "name": "copilot-league",
+  "version": "0.0.0",
+  "agents": ["agents/python-coder.agent.md"],
+  "skills": ["agents/skills/python-quality"],
   "hooks": [],
   "mcpServers": []
 }
@@ -352,7 +354,7 @@ MUST NOT use with `--autopilot` — stdin pipe and multi-turn are incompatible.
 | `COPILOT_GITHUB_TOKEN` | Auth token for headless execution |
 | `GITHUB_TOKEN` | Fallback auth (if COPILOT_GITHUB_TOKEN absent) |
 
-## � Generation + Score Loop Pattern
+## Generation and Score Loop Pattern
 
 Use when a pipeline must produce reviewable output (a report, summary, or analysis) and
 quality must meet a measurable threshold before the artifact is accepted. The pattern
@@ -477,7 +479,7 @@ Each rubric item MUST produce a binary PASS/FAIL with quoted evidence — NOT a 
 FAIL items without quoted evidence cannot drive correction — the generator has no specific
 target to fix on retry.
 
-## �🔁 Orchestrator & Subagent Pattern
+## Orchestrator and Subagent Pattern
 
 ### How Subagents Work
 
@@ -617,6 +619,7 @@ Violation: STOP. Await confirmation.
 
 0. **Confirm intent (MANDATORY):**
    - Load Intent-First persona: readFile `.github/agents/personas/intent-first.persona.md`
+   - When an approach fork appears: readFile `.github/agents/personas/consultant.persona.md`
    - Read all available context (prompt, referenced files, conversation)
    - State hypothesis in 1-3 plain sentences
    - Ask: "Does this match what you have in mind?"
@@ -858,12 +861,14 @@ tools: ['read', 'write']
 <details>
 <summary><strong>📋 Template 3: Plugin Manifest</strong> (click to expand)</summary>
 
+Copy `.github/plugin/plugin.json` and trim to the agents and skills this plugin ships.
+
 ```json
 {
   "name": "plugin-name",
   "version": "1.0.0",
-  "agents": [".github/agents/my-agent.agent.md"],
-  "skills": [],
+  "agents": ["agents/my-agent.agent.md"],
+  "skills": ["agents/skills/my-skill"],
   "hooks": [],
   "mcpServers": []
 }

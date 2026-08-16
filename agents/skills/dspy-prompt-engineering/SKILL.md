@@ -10,6 +10,12 @@ user-invocable: false
 
 # DSPy prompt engineering
 
+## When to Load
+
+Load when writing or revising dspy-go module prompts, generator/evaluator signatures, or optimizing instructions for structured output.
+
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 In dspy-go, **signatures** define structure; **instructions** define behavior. Field **descriptions** steer XML shape and parser behavior.
 
 ---

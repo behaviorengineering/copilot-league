@@ -1,8 +1,16 @@
+---
+name: doc-revise
+description: 'Five-filter editorial revision for documentation: opening clarity, voice, accessibility, formatting, structure. Use when DOC-ARCHITECT or DOC-EDITOR must proofread or revise a draft after cold-read or standalone.'
+user-invocable: false
+---
+
 # Documentation Revision Skill
 
 ## When to Load
 
 Load when DOC-ARCHITECT or DOC-EDITOR needs to systematically proofread and refine documentation through ordered editorial filters. Use when the user asks to "revise this doc", "run the revision process", "edit systematically", or wants step-by-step refinement rather than just assessment.
+
+**Cited by:** `.github/agents/doc-architect.agent.md`, `.github/agents/doc-editor.agent.md`
 
 **LOAD-WHEN:** Any doc agent conducting editorial review (after `doc-cold-read` assessment or standalone).
 

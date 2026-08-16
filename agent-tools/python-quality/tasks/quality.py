@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from invoke import task  # type: ignore[attr-defined]
 
 from tasks._config import resolve_tool_config
-from tasks._logger import segment, success
+from tasks._logger import error, segment, success
+from tasks._paths import require_existing_path
+from tasks._radon import rank_failures
 from tasks._run import run
 
 if TYPE_CHECKING:
@@ -22,6 +25,7 @@ def format(_ctx: Context, path: str = ".") -> None:
         _ctx: Invoke context (unused).
         path: File or directory relative to /workspace (default: entire workspace).
     """
+    require_existing_path(path)
     ruff_cfg = resolve_tool_config("ruff.toml")
     segment("Fix lint issues")
     run(["ruff", "check", "--config", str(ruff_cfg), "--fix", path])
@@ -38,6 +42,7 @@ def lint(_ctx: Context, path: str = ".") -> None:
         _ctx: Invoke context (unused).
         path: File or directory relative to /workspace (default: entire workspace).
     """
+    require_existing_path(path)
     ruff_cfg = resolve_tool_config("ruff.toml")
     mypy_cfg = resolve_tool_config("mypy.ini")
 
@@ -48,5 +53,17 @@ def lint(_ctx: Context, path: str = ".") -> None:
     segment("Mypy type check")
     run(["mypy", "--config-file", str(mypy_cfg), "--strict", path])
     segment("Radon complexity")
-    run(["radon", "cc", "-s", path])
+    json_result = run(["radon", "cc", "-j", "-s", path], capture=True)
+    if json_result.returncode not in (0, 1):
+        error("radon exited with an unexpected status")
+        raise SystemExit(json_result.returncode)
+    try:
+        report = json.loads(json_result.stdout or "{}")
+    except json.JSONDecodeError:
+        error("radon produced invalid JSON")
+        raise SystemExit(1) from None
+    failures = rank_failures(report)
+    if failures:
+        error("Radon rank C+ findings:\n" + "\n".join(failures))
+        raise SystemExit(1)
     success("All linting checks passed")

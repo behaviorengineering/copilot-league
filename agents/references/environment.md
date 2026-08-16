@@ -39,9 +39,9 @@ Shipped placeholders assume `REGISTRY_VENDOR=artifactory`. A Nexus org MUST repl
 | `CORP_CA_CERT_URL` | `https://artifactory.example.com/artifactory/generic/security/certificates/corp-ca.pem` | Corporate CA fetch in Dockerfiles |
 | `HTTP_PROXY` | `http://proxy.example.com:8080` | `HTTP_PROXY` / `HTTPS_PROXY` |
 | `NO_PROXY` | `localhost,127.0.0.1,.internal.example.com,artifactory.example.com` | MUST include `PACKAGE_REGISTRY_HOST` |
-| `GIT_SSH_HOST` | `git.example.com` | Internal git clone host |
+| `GIT_SSH_HOST` | `git.example.com` | Internal git clone host when the repo is not `AGENTS_GIT_URL`. Compose `ssh://git@${GIT_SSH_HOST}/...`. NEVER invent a host. |
 
-Derived URLs (do not store separately — compose from the table):
+Derived URLs (do not store separately — compose from the table). Jenkins credential bindings inject `REGISTRY_USR` / `REGISTRY_PSW`. BuildKit and local shells use `REGISTRY_USER` / `REGISTRY_TOKEN` (same login and token; different names). Strip `@...` from `REGISTRY_USER` / `REGISTRY_USR` before Basic auth.
 
 ```
 DOCKER_PULL_URL     = https://${DOCKER_PULL_DOMAIN}
@@ -95,7 +95,7 @@ Worked Nexus example (do not use unless `REGISTRY_VENDOR` is `nexus`):
 |-----|------|
 | `REGISTRY_USER` | Login name only. If the shell value is an SSO email, strip the portion from `@` onward: `user@corp.example.com` → `user`. Full email returns HTTP 401. |
 | `REGISTRY_TOKEN` | Read from the environment at runtime. NEVER hardcode. NEVER pass as Docker `ARG` or `ENV`. |
-| BuildKit secret IDs | `username` → `REGISTRY_USER`, `token` → `REGISTRY_TOKEN`. NEVER `ARG`/`ENV`. |
+| BuildKit secret IDs | `username` → `REGISTRY_USER`, `token` → `REGISTRY_TOKEN`. NEVER `ARG`/`ENV`. Jenkins `credentials()` binds `REGISTRY_USR` / `REGISTRY_PSW` — same values, Jenkins names. |
 | `GONOSUMCHECK` | `*` — corporate Go proxies (Artifactory and Nexus) typically do not serve checksum DB entries. MUST be set before every `go install` / `go get`. |
 
 ## Git Repositories

@@ -3,18 +3,18 @@
 Reference patterns for this project. Load when generating code that uses these structures.
 
 ## Table of Contents
-1. [Pydantic Models](#pydantic-models)
-2. [Controllers (Flask / flask-openapi3)](#controllers-flask--flask-openapi3)
-3. [Services](#services)
-4. [Clients (HTTP)](#clients-http)
-5. [Repositories (SQLite)](#repositories-sqlite)
-6. [Exception Hierarchy](#exception-hierarchy)
-7. [Caching](#caching)
-8. [Testing](#testing)
+1. [Python: Pydantic Models](#python-pydantic-models)
+2. [Python: Controllers (Flask / flask-openapi3)](#python-controllers-flask--flask-openapi3)
+3. [Python: Services](#python-services)
+4. [Python: Clients (HTTP)](#python-clients-http)
+5. [Python: Repositories (SQLite)](#python-repositories-sqlite)
+6. [Python: Exception Hierarchy](#python-exception-hierarchy)
+7. [Python: Caching](#python-caching)
+8. [Python: Testing](#python-testing)
 
 ---
 
-## Pydantic Models
+## Python: Pydantic Models
 
 ### Standard field model — all fields optional with `Field(default=None, example=...)`
 
@@ -100,7 +100,7 @@ class PostFormat(BaseModel):
 
 ---
 
-## Controllers (Flask / flask-openapi3)
+## Python: Controllers (Flask / flask-openapi3)
 
 The project uses `flask-openapi3` `APIBlueprint`. Controllers are classes; routes are closures inside `__init__`.
 
@@ -148,7 +148,7 @@ class PostController:
 
 ---
 
-## Services
+## Python: Services
 
 Services are thin orchestration classes. They delegate to clients; they do NOT call `requests` directly.
 
@@ -181,7 +181,7 @@ class GcmService:
 
 ---
 
-## Clients (HTTP)
+## Python: Clients (HTTP)
 
 Clients own all `requests` usage. They inject headers via a custom `HTTPAdapter` subclass and apply `@cache` for repeated reads.
 
@@ -237,7 +237,7 @@ class GcmClient:
 
 ---
 
-## Repositories (SQLite)
+## Python: Repositories (SQLite)
 
 Repositories own all database access. Schema is built dynamically from upstream XML data shapes.
 
@@ -289,7 +289,7 @@ class TlaRepository:
 
 ---
 
-## Exception Hierarchy
+## Python: Exception Hierarchy
 
 All custom exceptions inherit from `ExceptionBase` which carries `status_code` for the Flask error handler.
 
@@ -337,7 +337,7 @@ except requests.HTTPError as e:
 
 ---
 
-## Caching
+## Python: Caching
 
 `@cache(minutes=N)` is a time-expiring LRU cache from `helper.cache`. Apply to client read methods.
 
@@ -360,7 +360,7 @@ class GcmClient:
 
 ---
 
-## Testing
+## Python: Testing
 
 ### `conftest.py` — path setup and env loading
 

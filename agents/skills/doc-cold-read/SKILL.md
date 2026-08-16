@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when DOC-ARCHITECT or DOC-EDITOR encounter unfamiliar documentation and need to quickly assess its structure, intent, and gaps before deciding what work is required.
 
+**Cited by:** `.github/agents/doc-architect.agent.md`, `.github/agents/doc-editor.agent.md`
+
 ## Core Constraints
 
 **CONSTRAINT:** A cold read MUST complete in 4 discrete phases — READ-STRUCTURE, IDENTIFY-INTENT, ASSESS-GAPS, CLASSIFY-WORK. Do NOT blend phases or omit any.

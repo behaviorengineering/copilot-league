@@ -54,6 +54,8 @@ def _init_repo(root: Path) -> None:
         root: Empty directory to initialize.
     """
     _git(["init", "-b", "main"], cwd=root)
+    _git(["config", "user.name", "test"], cwd=root)
+    _git(["config", "user.email", "test@example.com"], cwd=root)
     (root / "README.md").write_text("ok\n", encoding="utf-8")
     _git(["add", "README.md"], cwd=root)
     _git(["commit", "-m", "init"], cwd=root)
@@ -183,13 +185,14 @@ def test_get_remote_branches_parses_origin_refs(
                 "  origin/HEAD -> origin/main\n"
                 "  origin/main\n"
                 "  origin/feature\n"
+                "  origin/HEAD-fix\n"
                 "  origin/main"
             )
         raise AssertionError(args)
 
     monkeypatch.setattr(submodule, "run_git", fake_run_git)
     branches = submodule.get_remote_branches(tmp_path)
-    assert branches == ["feature", "main"]
+    assert branches == ["HEAD-fix", "feature", "main"]
     capsys.readouterr()
 
 
@@ -206,3 +209,196 @@ def test_find_submodule_root_exits_outside_git(
         submodule.find_submodule_root()
     assert caught.value.code == 1
     assert "not inside a git repo" in capsys.readouterr().out
+
+
+def test_cmd_pin_commit_updates_parent_pointer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pin commits the parent gitlink after the submodule SHA moves."""
+    parent = tmp_path / "app"
+    child = parent / ".github"
+    parent.mkdir()
+    child.mkdir()
+    _init_repo(parent)
+    _init_repo(child)
+    sha = _git(["rev-parse", "HEAD"], cwd=child)
+    _git(
+        ["update-index", "--add", "--cacheinfo", f"160000,{sha},.github"],
+        cwd=parent,
+    )
+    _git(["commit", "-m", "add submodule"], cwd=parent)
+    (child / "extra.txt").write_text("x\n", encoding="utf-8")
+    _git(["add", "extra.txt"], cwd=child)
+    _git(["commit", "-m", "child change"], cwd=child)
+    submodule.cmd_pin_commit(child, parent, ".github")
+    log = _git(["log", "-1", "--format=%s"], cwd=parent)
+    assert log.startswith("Pin .github submodule to commit")
+    capsys.readouterr()
+
+
+def test_push_to_origin_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Successful push prints the branch name and does not exit."""
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return "main"
+        if args[:3] == ["push", "origin", "main"]:
+            return ""
+        raise AssertionError(args)
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    submodule.push_to_origin(tmp_path)
+    assert "Pushed 'main' to origin." in capsys.readouterr().out
+
+
+def test_push_to_origin_failure_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """git push failure is a fatal SystemExit, not a traceback."""
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        if args[:2] == ["symbolic-ref", "--short"]:
+            return "main"
+        raise subprocess.CalledProcessError(1, ["git", *args])
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    with pytest.raises(SystemExit) as caught:
+        submodule.push_to_origin(tmp_path)
+    assert caught.value.code == 1
+    assert "git push failed" in capsys.readouterr().out
+
+
+def test_cmd_update_commits_parent_pointer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Update pulls, then commits the parent gitlink when SHAs match."""
+    parent = tmp_path / "app"
+    child = parent / ".github"
+    monkeypatch.setattr(submodule, "get_current_branch", lambda _root: "main")
+    monkeypatch.setattr(submodule, "_confirm_and_reset", lambda _root: True)
+    monkeypatch.setattr(
+        submodule, "_pull_with_recovery", lambda _root, _branch: "Already up to date."
+    )
+    monkeypatch.setattr(
+        submodule, "get_remote_tracking_sha", lambda _root, _branch: "abc1234"
+    )
+
+    commits: list[list[str]] = []
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        if args[:2] == ["rev-parse", "HEAD"]:
+            return "abc1234"
+        if args[:1] == ["add"]:
+            assert args[1] == ".github"
+            assert cwd == parent
+            return ""
+        if args[:1] == ["commit"]:
+            commits.append(args)
+            return "committed"
+        raise AssertionError(args)
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    submodule.cmd_update(child, parent, ".github")
+    assert commits
+    assert "Update .github submodule to latest 'main'" in commits[0][-1]
+    capsys.readouterr()
+
+
+def test_cmd_switch_branch_commits_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Switch checks out the selected branch and pins .gitmodules on the parent."""
+    parent = tmp_path / "app"
+    child = parent / ".github"
+    git_dir = tmp_path / "gitdir"
+    git_dir.mkdir()
+    monkeypatch.setattr(submodule, "get_remote_branches", lambda _root: ["main", "dev"])
+    monkeypatch.setattr(submodule, "get_current_branch", lambda _root: "main")
+    monkeypatch.setattr(submodule, "_select_branch", lambda _branches, _current: "dev")
+    monkeypatch.setattr(submodule, "_confirm_and_reset", lambda _root: True)
+    monkeypatch.setattr(submodule, "_get_git_dir", lambda _root: git_dir)
+
+    seen: list[list[str]] = []
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        seen.append(args)
+        return ""
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    submodule.cmd_switch_branch(child, parent, ".github")
+    assert ["checkout", "dev"] in seen
+    assert ["reset", "--hard", "origin/dev"] in seen
+    assert ["submodule", "set-branch", "--branch", "dev", ".github"] in seen
+    assert any(
+        args[:1] == ["commit"] and "Pin .github submodule to branch 'dev'" in args[-1]
+        for args in seen
+    )
+    capsys.readouterr()
+
+
+def test_cmd_update_refuses_detached_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Update on detached HEAD is a no-op, not a pull of '(detached HEAD)'."""
+    monkeypatch.setattr(
+        submodule, "get_current_branch", lambda _root: "(detached HEAD)"
+    )
+    called: list[str] = []
+    monkeypatch.setattr(
+        submodule, "_pull_with_recovery", lambda *_a, **_k: called.append("pull")
+    )
+    assert submodule.cmd_update(tmp_path, None, ".github") is False
+    assert called == []
+    assert "detached HEAD" in capsys.readouterr().out
+
+
+def test_interactive_menu_skips_push_when_update_cancelled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelled update must not prompt to push."""
+    parent = tmp_path / "app"
+    child = parent / ".github"
+    monkeypatch.setattr(submodule, "get_current_branch", lambda _root: "main")
+    monkeypatch.setattr(submodule, "_build_menu", lambda *_a, **_k: "menu")
+    monkeypatch.setattr(submodule, "cmd_update", lambda *_a, **_k: False)
+    pushed: list[str] = []
+    monkeypatch.setattr(submodule, "push_to_origin", lambda _p: pushed.append("push"))
+    answers = iter(["1", "q"])
+    monkeypatch.setattr("builtins.input", lambda _p="": next(answers))
+    submodule.interactive_menu(child, parent, ".github")
+    assert pushed == []
+
+
+def test_reset_working_tree_runs_hard_reset_and_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reset discards tracked and untracked files."""
+    seen: list[list[str]] = []
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        seen.append(args)
+        return ""
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    submodule.reset_working_tree(tmp_path)
+    assert ["reset", "--hard", "HEAD"] in seen
+    assert ["clean", "-fd"] in seen
+
+
+def test_pull_with_recovery_returns_none_when_user_cancels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Failed pull with no MERGE_HEAD asks to reset; declining aborts."""
+    git_dir = tmp_path / "gitdir"
+    git_dir.mkdir()
+    monkeypatch.setattr(submodule, "_get_git_dir", lambda _root: git_dir)
+
+    def fake_run_git(args: list[str], *, cwd: Path, check: bool = True) -> str:
+        raise subprocess.CalledProcessError(1, ["git", *args])
+
+    monkeypatch.setattr(submodule, "run_git", fake_run_git)
+    monkeypatch.setattr("builtins.input", lambda _p="": "n")
+    assert submodule._pull_with_recovery(tmp_path, "main") is None
+    capsys.readouterr()

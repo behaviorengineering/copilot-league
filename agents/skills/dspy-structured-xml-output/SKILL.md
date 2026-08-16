@@ -12,6 +12,12 @@ user-invocable: false
 
 # DSPy structured XML output
 
+## When to Load
+
+Load when adding or changing generator output fields, debugging mandatory field validation failures, using bullet/list XML in signatures, aligning prompts with parser behavior, or deciding whether string/regex parsing is appropriate.
+
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 **Principle:** The LLM returns XML; a **custom parser** turns it into `map[string]any` before **validation** runs. If prompts and parser disagree, fields can look full in logs but parse as **empty** and fail validation.
 
 **Portable pattern:** Projects adopting this approach replace or wrap stock dspy-go XML interceptors with the same **format → parse → validate → retry** chain. Stock dspy-go `WithXMLOutput` is a fallback reference only when custom interceptors are not used.
@@ -91,5 +97,5 @@ FormatInterceptor  →  LLM  →  ParseInterceptor  →  ValidationInterceptor  
 
 ## Additional resources
 
-- Parser field heuristics and phased composition: `agents/references/dspy-xml-output.md`
-- Module wiring: `agents/skills/dspy-module-patterns/SKILL.md`
+- Parser field heuristics and phased composition: `.github/agents/references/dspy-xml-output.md`
+- Module wiring: `.github/agents/skills/dspy-module-patterns/SKILL.md`

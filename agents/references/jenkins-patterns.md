@@ -62,7 +62,7 @@ pipeline {
         booleanParam(name: 'PUSH_TO_REGISTRY', defaultValue: false,
             description: 'Push images (auto-enabled on master/main/develop)')
         string(name: 'UPSTREAM_PYTHON_IMAGE',
-            defaultValue: '<DOCKER_PULL_DOMAIN>/python:3.14-bookworm',
+            defaultValue: '<DOCKER_PULL_DOMAIN>/python:3.12-bookworm',
             description: 'Bootstrap image for Calculate Image Tags stage')
     }
 

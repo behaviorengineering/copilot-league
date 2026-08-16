@@ -99,4 +99,4 @@ To reuse this pattern in a new dspy-go project:
 1. Copy the **concepts** (runner, typed input, client/modules split, chained eval, orchestration).
 2. Implement or vendor a **custom XML parser + validation + retry** stack (or document stock `WithXMLOutput` limits).
 3. Define your own `internal/pipelines/<name>/` layout mirroring the table in the pipeline-jobs skill.
-4. Load skills from `agents/skills/dspy-*/SKILL.md` for implementation guidance.
+4. Load skills from `.github/agents/skills/dspy-*/SKILL.md` for implementation guidance.

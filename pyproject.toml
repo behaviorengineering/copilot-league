@@ -1,3 +1,10 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []
+
 [project]
 name = "copilot-league"
 version = "0.0.0"
@@ -8,12 +15,37 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.8",
+    "mypy>=1.8",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests/agent-tools"]
 markers = [
-    "image: builds and runs agent-tool container images (requires Docker)",
+    "image: builds and runs agent-tool container images (requires Docker or Podman)",
     "corp: corp-stage builds against the Caddy package-registry double",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "C4", "UP",
+    "ARG", "SIM", "TCH", "PTH", "N", "PL", "RUF",
+]
+ignore = [
+    "E501",
+    "B008",
+    "PLR0913",
+    "PLR2004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*.py" = ["PLR2004", "S101", "ARG", "TC002", "TC003", "N802"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

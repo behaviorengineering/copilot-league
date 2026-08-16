@@ -1,5 +1,5 @@
 line-length = 88
-target-version = "py311"
+target-version = "py312"
 exclude = [
     ".git",
     ".venv",
@@ -27,7 +27,8 @@ ignore = [
 "tests/**/*.py" = ["PLR2004", "S101", "ARG"]
 
 [lint.isort]
-# Override in repo-root ruff.toml: known-first-party = ["your_package"]
+# Override in the consuming project's pyproject.toml [tool.ruff.lint.isort]
+# or ruff.toml: known-first-party = ["your_package"]
 
 [lint.pydocstyle]
 convention = "google"

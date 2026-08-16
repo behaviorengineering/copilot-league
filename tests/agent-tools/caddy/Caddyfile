@@ -2,12 +2,14 @@
 # Path prefixes match environment.md shipped Artifactory placeholders.
 # Unauthenticated: /health and CORP_CA_CERT_URL. Everything else on :8443: basic_auth.
 #
-# :443 MITMs files.pythonhosted.org and registry.npmjs.org (stock Caddy, no
-# HTML rewrite). The Caddy container still resolves those names on the public
-# internet; docker build --add-host points the *build* at host-gateway.
+# Wheel/tarball CDN URLs are rewritten by the host rewriter (REWRITE_UPSTREAM)
+# onto /pypi-files and /npm-tarballs on this vhost. No host :443 MITM.
 #
 # CORP_BASIC_HASH is a bcrypt hash passed at container start (Caddyfile `$`
 # would eat a literal hash).
+#
+# Production mirrors must not copy the /debian rewrite — it exists so this
+# double can reverse_proxy deb.debian.org.
 
 {
 	auto_https off
@@ -55,32 +57,14 @@
 		}
 	}
 
-	handle_path /artifactory/api/pypi/pypi-virtual/simple* {
+	handle /artifactory/api/pypi/pypi-virtual/simple* {
 		import corp_auth
-		rewrite * /simple{path}
-		reverse_proxy https://pypi.org {
-			header_up Host pypi.org
+		reverse_proxy {$REWRITE_UPSTREAM} {
 			header_up Authorization ""
 		}
 	}
 
-	handle_path /artifactory/api/npm/npm-virtual/* {
-		import corp_auth
-		reverse_proxy https://registry.npmjs.org {
-			header_up Host registry.npmjs.org
-			header_up Authorization ""
-		}
-	}
-
-	respond "not a corp path" 404
-}
-
-:443 {
-	import access_log
-	tls /certs/cert.pem /certs/key.pem
-
-	@pypi_files host files.pythonhosted.org
-	handle @pypi_files {
+	handle_path /pypi-files/* {
 		reverse_proxy https://files.pythonhosted.org {
 			header_up Host files.pythonhosted.org
 			header_up Authorization ""
@@ -90,8 +74,14 @@
 		}
 	}
 
-	@npm_registry host registry.npmjs.org
-	handle @npm_registry {
+	handle /artifactory/api/npm/npm-virtual/* {
+		import corp_auth
+		reverse_proxy {$REWRITE_UPSTREAM} {
+			header_up Authorization ""
+		}
+	}
+
+	handle_path /npm-tarballs/* {
 		reverse_proxy https://registry.npmjs.org {
 			header_up Host registry.npmjs.org
 			header_up Authorization ""
@@ -101,5 +91,5 @@
 		}
 	}
 
-	respond "not a cdn host" 404
+	respond "not a corp path" 404
 }

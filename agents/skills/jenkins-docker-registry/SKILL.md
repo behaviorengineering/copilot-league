@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when writing Docker stages in Jenkinsfiles, Dockerfiles, or any script that pulls/pushes images or installs packages via the corporate registry (Artifactory or Nexus).
 
+**Cited by:** `.github/agents/jenkins-coder.agent.md`, `.github/agents/python-coder.agent.md`
+
 MUST load `.github/agents/references/environment.md` first — every hostname, credential ID, and proxy value comes from that overlay. `REGISTRY_VENDOR` selects Artifactory vs Nexus path shapes. Then load `.github/agents/references/package-registries.md` for apt/npm/pip templates.
 
 Substitute the Value column at generation time. NEVER copy hosts from this file.
@@ -62,15 +64,18 @@ agent {
 
 **CONSTRAINT:** Dockerfiles MUST pull base images via the corporate pull-through cache using `ARG BASE_IMAGE`.
 
+Empty `ARG` — pass `--build-arg BASE_IMAGE=${DOCKER_PULL_DOMAIN}/python:3.12-bookworm` from `environment.md`.
+
 CORRECT:
 ```dockerfile
-ARG BASE_IMAGE=<DOCKER_PULL_DOMAIN>/python:3.14-bookworm
+ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 ```
 
 PROHIBITED:
 ```dockerfile
-FROM python:3.14-bookworm   # Direct Docker Hub — blocked in this environment
+FROM python:3.12-bookworm   # Direct Docker Hub — blocked in this environment
+ARG BASE_IMAGE=<DOCKER_PULL_DOMAIN>/python:3.12-bookworm  # placeholder default
 ```
 
 **CONSTRAINT:** All apt operations MUST be in ONE merged `RUN` layer using BuildKit `--mount=type=secret` — NEVER split into separate layers.
@@ -89,13 +94,13 @@ Verification:
 - apt credentials in `ENV` or `ARG`: FAIL (baked into image layer, secrets exposed)
 - `registry.list` file removed after apt install: PASS
 - `registry.list` file left on filesystem: FAIL (credentials persist in layer)
-- Debian suite matches base image (e.g., `bookworm` for `python:3.14-bookworm`): PASS
+- Debian suite matches base image (e.g., `bookworm` for `python:3.12-bookworm`): PASS
 
 **CONSTRAINT:** npm packages MUST use the corporate virtual registry from `environment.md` with BuildKit `--mount=type=secret` — NEVER plain `npm install` or hardcoded credentials.
 
 ```dockerfile
-ARG PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST>
-ARG NPM_VIRTUAL_PATH=<NPM_VIRTUAL_PATH>
+ARG PACKAGE_REGISTRY_HOST
+ARG NPM_VIRTUAL_PATH
 RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     REGISTRY_USER=$(cat /run/secrets/username | cut -d@ -f1) && \
@@ -112,6 +117,14 @@ BuildKit secrets injected in the build script:
 DOCKER_BUILDKIT=1 docker build \
     --secret id=username,env=REGISTRY_USER \
     --secret id=token,env=REGISTRY_TOKEN \
+    ...
+```
+
+```powershell
+$env:DOCKER_BUILDKIT = "1"
+docker build `
+    --secret id=username,env=REGISTRY_USER `
+    --secret id=token,env=REGISTRY_TOKEN `
     ...
 ```
 

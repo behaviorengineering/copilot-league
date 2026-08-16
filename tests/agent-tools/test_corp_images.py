@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import base64
+import os
 import shutil
 import ssl
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -14,18 +16,26 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from dockerutil import CADDYFILE, REPO_ROOT, run_checked, run_tool
+import urlrewrite
+from dockerutil import (
+    CADDYFILE,
+    REPO_ROOT,
+    combined_output,
+    published_host_port,
+    run_checked,
+    run_tool,
+    tls_flags,
+)
 
 pytestmark = [pytest.mark.image, pytest.mark.corp]
 
 _CADDY_IMAGE = "caddy:2-alpine"
 _CADDY_NAME = "corp-proxy-caddy"
-_LISTEN_PORT = 8443
+_CADDY_PORT = 8443
 _REGISTRY_USER = "ci-user"
 _REGISTRY_TOKEN = "ci-token"
 _BASIC_HASH = "$2a$14$NCsZtKhEJ.3p6i3TSe3gjufBtuCQzuJCvVQu6csxVfvfqe8bpA7ei"
 _PACKAGE_NAME = "artifactory.example.com"
-_CDN_HOSTS = ("files.pythonhosted.org", "registry.npmjs.org")
 _WAIT_SECONDS = 60
 _CA_CNF = """\
 [req]
@@ -54,7 +64,7 @@ CN = artifactory.example.com
 basicConstraints = CA:FALSE
 keyUsage = digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth
-subjectAltName = DNS:artifactory.example.com, DNS:files.pythonhosted.org, DNS:registry.npmjs.org
+subjectAltName = DNS:artifactory.example.com
 """
 
 _UNVERIFIED_SSL = ssl.create_default_context()
@@ -77,7 +87,7 @@ class CorpRegistry:
 
 
 def _write_tls_material(cert_dir: Path) -> None:
-    """Write a test CA plus a server cert Caddy presents on :8443 and :443.
+    """Write a test CA plus a server cert Caddy presents on :8443.
 
     Args:
         cert_dir: Directory that receives ca.pem, cert.pem, and key.pem.
@@ -196,10 +206,11 @@ def _caddy_logs(docker: str) -> str:
     return (result.stdout or "") + (result.stderr or "")
 
 
-def _corp_build_flags(registry: CorpRegistry) -> list[str]:
+def _corp_build_flags(docker: str, registry: CorpRegistry) -> list[str]:
     """Docker build flags that point RUN at the Caddy double.
 
     Args:
+        docker: Engine CLI name.
         registry: Live Caddy connection details.
 
     Returns:
@@ -207,11 +218,10 @@ def _corp_build_flags(registry: CorpRegistry) -> list[str]:
     """
     flags = [
         "--no-cache",
+        *tls_flags(docker),
         "--add-host",
         f"{_PACKAGE_NAME}:host-gateway",
     ]
-    for cdn_host in _CDN_HOSTS:
-        flags.extend(["--add-host", f"{cdn_host}:host-gateway"])
     flags.extend(
         [
             "--build-arg",
@@ -237,7 +247,7 @@ def _corp_build_flags(registry: CorpRegistry) -> list[str]:
 def corp_registry(
     docker: str, tmp_path_factory: pytest.TempPathFactory
 ) -> Iterator[CorpRegistry]:
-    """Start Caddy on :8443 and yield registry build-args."""
+    """Start Caddy on container :8443 (ephemeral host port) and a URL rewriter."""
     secrets = tmp_path_factory.mktemp("corp-secrets")
     username_file = secrets / "username"
     token_file = secrets / "token"
@@ -246,8 +256,13 @@ def corp_registry(
     cert_dir = tmp_path_factory.mktemp("corp-tls")
     _write_tls_material(cert_dir)
 
+    rewriter = urlrewrite.serve(0)
+    rewrite_port = rewriter.server_address[1]
+    rewrite_thread = threading.Thread(target=rewriter.serve_forever, daemon=True)
+    rewrite_thread.start()
+
     subprocess.run([docker, "rm", "-f", _CADDY_NAME], check=False, capture_output=True)
-    run_checked([docker, "pull", _CADDY_IMAGE])
+    run_checked([docker, "pull", *tls_flags(docker), _CADDY_IMAGE])
     run_checked(
         [
             docker,
@@ -256,11 +271,13 @@ def corp_registry(
             "--name",
             _CADDY_NAME,
             "-p",
-            f"{_LISTEN_PORT}:{_LISTEN_PORT}",
-            "-p",
-            "443:443",
+            str(_CADDY_PORT),
+            "--add-host",
+            "host.docker.internal:host-gateway",
             "-e",
             f"CORP_BASIC_HASH={_BASIC_HASH}",
+            "-e",
+            f"REWRITE_UPSTREAM=http://host.docker.internal:{rewrite_port}",
             "-v",
             f"{CADDYFILE}:/etc/caddy/Caddyfile:ro",
             "-v",
@@ -269,14 +286,16 @@ def corp_registry(
         ]
     )
     try:
+        host_port = published_host_port(docker, _CADDY_NAME, _CADDY_PORT)
+        os.environ["REWRITE_PUBLIC_ORIGIN"] = f"https://{_PACKAGE_NAME}:{host_port}"
         _wait_for_caddy(
-            f"https://127.0.0.1:{_LISTEN_PORT}/health",
+            f"https://127.0.0.1:{host_port}/health",
             docker,
             _CADDY_NAME,
             _WAIT_SECONDS,
         )
-        package_host = f"{_PACKAGE_NAME}:{_LISTEN_PORT}"
-        listen_base = f"https://127.0.0.1:{_LISTEN_PORT}"
+        package_host = f"{_PACKAGE_NAME}:{host_port}"
+        listen_base = f"https://127.0.0.1:{host_port}"
         yield CorpRegistry(
             package_host=package_host,
             listen_base=listen_base,
@@ -296,6 +315,7 @@ def corp_registry(
             check=False,
             capture_output=True,
         )
+        rewriter.shutdown()
 
 
 @pytest.fixture(scope="session")
@@ -306,7 +326,7 @@ def corp_base_image(docker: str, corp_registry: CorpRegistry) -> str:
         [
             docker,
             "build",
-            *_corp_build_flags(corp_registry),
+            *_corp_build_flags(docker, corp_registry),
             "-t",
             tag,
             str(REPO_ROOT / "agent-tools" / "base"),
@@ -315,11 +335,29 @@ def corp_base_image(docker: str, corp_registry: CorpRegistry) -> str:
     return tag
 
 
+def test_corp_base_sets_ca_bundle(docker: str, corp_base_image: str) -> None:
+    """Base image exports REQUESTS_CA_BUNDLE after installing the corp CA."""
+    result = subprocess.run(
+        [
+            docker,
+            "run",
+            "--rm",
+            "--entrypoint",
+            "printenv",
+            corp_base_image,
+            "REQUESTS_CA_BUNDLE",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "/etc/ssl/certs/ca-certificates.crt"
+
+
 @pytest.fixture(scope="session")
-def python_quality_corp_image(
-    docker: str, corp_registry: CorpRegistry, corp_base_image: str
-) -> str:
-    """Build python-quality --target corp through Caddy (apt + pip)."""
+def python_quality_corp_image(docker: str, corp_registry: CorpRegistry) -> str:
+    """Build python-quality --target corp through Caddy (CA + pip)."""
     tag = "python-quality:corp-smoke"
     run_checked(
         [
@@ -327,7 +365,7 @@ def python_quality_corp_image(
             "build",
             "--target",
             "corp",
-            *_corp_build_flags(corp_registry),
+            *_corp_build_flags(docker, corp_registry),
             "-t",
             tag,
             str(REPO_ROOT / "agent-tools" / "python-quality"),
@@ -338,7 +376,7 @@ def python_quality_corp_image(
 
 @pytest.fixture(scope="session")
 def groovy_lint_corp_image(docker: str, corp_registry: CorpRegistry) -> str:
-    """Build groovy-lint --target corp through Caddy (CA + npm)."""
+    """Build groovy-lint --target corp through Caddy (CA + apt JRE + npm)."""
     tag = "groovy-lint:corp-smoke"
     run_checked(
         [
@@ -346,7 +384,7 @@ def groovy_lint_corp_image(docker: str, corp_registry: CorpRegistry) -> str:
             "build",
             "--target",
             "corp",
-            *_corp_build_flags(corp_registry),
+            *_corp_build_flags(docker, corp_registry),
             "-t",
             tag,
             str(REPO_ROOT / "agent-tools" / "groovy-lint"),
@@ -388,6 +426,28 @@ def test_corp_proxy_accepts_basic_auth(corp_registry: CorpRegistry) -> None:
         assert response.status == 200
 
 
+def test_python_quality_corp_python_is_3_12(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp image interpreter is Python 3.12, matching public."""
+    result = subprocess.run(
+        [
+            docker,
+            "run",
+            "--rm",
+            "--entrypoint",
+            "python3",
+            python_quality_corp_image,
+            "--version",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip().startswith("Python 3.12")
+
+
 def test_python_quality_corp_lint_passes(
     docker: str, python_quality_corp_image: str
 ) -> None:
@@ -397,7 +457,99 @@ def test_python_quality_corp_lint_passes(
         python_quality_corp_image,
         ["lint", "--path", "/workspace/ok.py"],
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 0, combined_output(result)
+
+
+def test_python_quality_corp_format_runs(
+    docker: str, python_quality_corp_image: str, tmp_path: Path
+) -> None:
+    """Corp format rewrites an ugly file."""
+    ugly = tmp_path / "ugly.py"
+    ugly.write_text("x=1\n", encoding="utf-8")
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["format", "--path", "/workspace/ugly.py"],
+        workspace=tmp_path,
+    )
+    assert result.returncode == 0, combined_output(result)
+    assert ugly.read_text(encoding="utf-8") != "x=1\n"
+
+
+def test_python_quality_corp_sec_code_passes(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp sec.code exits 0 on the typed fixture."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["sec.code", "--path", "/workspace/ok.py"],
+    )
+    assert result.returncode == 0, combined_output(result)
+
+
+def test_python_quality_corp_sec_secrets_passes(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp sec.secrets exits 0 when detect-secrets finds nothing."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["sec.secrets", "--path", "/workspace/ok.py"],
+    )
+    assert result.returncode == 0, combined_output(result)
+
+
+def test_python_quality_corp_lint_fails_on_untyped_file(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp lint exits non-zero when mypy --strict fails."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["lint", "--path", "/workspace/bad.py"],
+    )
+    assert result.returncode != 0
+    assert "mypy" in combined_output(result).lower()
+
+
+def test_python_quality_corp_lint_fails_on_complex_fixture(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp lint exits non-zero when radon reports rank C or worse."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["lint", "--path", "/workspace/complex_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "rank=" in combined_output(result)
+
+
+def test_python_quality_corp_sec_code_fails_on_eval(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp sec.code exits non-zero when bandit finds HIGH/MEDIUM issues."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["sec.code", "--path", "/workspace/bandit_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "Bandit" in combined_output(result)
+
+
+def test_python_quality_corp_sec_secrets_fails_on_example_key(
+    docker: str, python_quality_corp_image: str
+) -> None:
+    """Corp sec.secrets exits non-zero on AWS's published example access key."""
+    result = run_tool(
+        docker,
+        python_quality_corp_image,
+        ["sec.secrets", "--path", "/workspace/secret_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "secret" in combined_output(result).lower()
 
 
 def test_groovy_lint_corp_runs(docker: str, groovy_lint_corp_image: str) -> None:
@@ -415,22 +567,42 @@ def test_groovy_lint_corp_runs(docker: str, groovy_lint_corp_image: str) -> None
             "error",
         ],
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 0, combined_output(result)
+
+
+def test_groovy_lint_corp_fails_on_bad_fixture(
+    docker: str, groovy_lint_corp_image: str
+) -> None:
+    """Corp npm-groovy-lint exits non-zero on a parse error."""
+    result = run_tool(
+        docker,
+        groovy_lint_corp_image,
+        [
+            "--path",
+            "/workspace",
+            "--files",
+            "bad.groovy",
+            "--no-insight",
+            "--failon",
+            "error",
+        ],
+    )
+    assert result.returncode != 0
+    output = combined_output(result).lower()
+    assert "error" in output or "fail" in output
 
 
 def test_python_quality_corp_wheels_go_through_caddy(
     docker: str, python_quality_corp_image: str
 ) -> None:
-    """pip downloaded wheels via the files.pythonhosted.org MITM on :443."""
+    """pip downloaded wheels via /pypi-files on the Caddy vhost."""
     logs = _caddy_logs(docker)
-    assert python_quality_corp_image
-    assert ".whl" in logs, logs
+    assert "/pypi-files" in logs or ".whl" in logs, logs
 
 
 def test_groovy_lint_corp_tarballs_go_through_caddy(
     docker: str, groovy_lint_corp_image: str
 ) -> None:
-    """npm downloaded tarballs via the registry.npmjs.org MITM on :443."""
+    """npm downloaded tarballs via /npm-tarballs on the Caddy vhost."""
     logs = _caddy_logs(docker)
-    assert groovy_lint_corp_image
-    assert ".tgz" in logs, logs
+    assert "/npm-tarballs" in logs or ".tgz" in logs, logs

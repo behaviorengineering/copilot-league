@@ -4,15 +4,10 @@ Load when designing or reviewing any agent/skill instruction that must filter or
 a set of candidates (files, components, diff hunks, rubric items) and apply a qualifying rule.
 
 ## Table of Contents
-- [Instruction Design Patterns](#instruction-design-patterns)
-  - [Table of Contents](#table-of-contents)
-  - [Instruction Design — Forced Intermediate State](#instruction-design--forced-intermediate-state)
-    - [The Pattern](#the-pattern)
-  - [Instruction Design — Why Prose Rules Fail](#instruction-design--why-prose-rules-fail)
-  - [Instruction Design — Gate Template Slots](#instruction-design--gate-template-slots)
-    - [Gate Condition Design](#gate-condition-design)
-    - [Consequence Field Design](#consequence-field-design)
-  - [Instruction Design — When Not to Use](#instruction-design--when-not-to-use)
+1. [Forced Intermediate State](#instruction-design--forced-intermediate-state)
+2. [Why Prose Rules Fail](#instruction-design--why-prose-rules-fail)
+3. [Gate Template Slots](#instruction-design--gate-template-slots)
+4. [When Not to Use](#instruction-design--when-not-to-use)
 
 ---
 

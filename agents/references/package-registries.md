@@ -47,10 +47,10 @@ PROHIBITED — `withCredentials` for pip is unnecessary when credentials are alr
 withCredentials([usernamePassword(credentialsId: '<REGISTRY_CREDS_ID>', ...)]) { ... }
 ```
 
-Dockerfile usage (BuildKit secret — never `ARG` or `ENV`):
+Dockerfile usage (BuildKit secret — never `ARG` or `ENV`). Empty `ARG`s; pass values with `--build-arg` from `environment.md`. Base image: `python:3.12-bookworm`.
 ```dockerfile
-ARG PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST>
-ARG PIP_INDEX_PATH=<PIP_INDEX_PATH>
+ARG PACKAGE_REGISTRY_HOST
+ARG PIP_INDEX_PATH
 RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     REGISTRY_USER=$(cat /run/secrets/username | cut -d@ -f1) && \
@@ -67,10 +67,10 @@ RUN --mount=type=secret,id=username \
 https://${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}
 ```
 
-Dockerfile usage (BuildKit secret):
+Dockerfile usage (BuildKit secret). Empty `ARG`s; pass values with `--build-arg` from `environment.md`. Base image: `node:lts-slim`.
 ```dockerfile
-ARG PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST>
-ARG NPM_VIRTUAL_PATH=<NPM_VIRTUAL_PATH>
+ARG PACKAGE_REGISTRY_HOST
+ARG NPM_VIRTUAL_PATH
 RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     REGISTRY_USER=$(cat /run/secrets/username | cut -d@ -f1) && \
@@ -82,11 +82,11 @@ RUN --mount=type=secret,id=username \
         --//${PACKAGE_REGISTRY_HOST}/${NPM_VIRTUAL_PATH}:always-auth=true
 ```
 
-`PACKAGE_REGISTRY_HOST` and `NPM_VIRTUAL_PATH` MUST be Dockerfile `ARG`s whose defaults (or `--build-arg` values) come from `environment.md`.
+`PACKAGE_REGISTRY_HOST` and `NPM_VIRTUAL_PATH` MUST be Dockerfile `ARG`s with **empty defaults**. Pass `--build-arg` values from `environment.md`.
 
 ## Debian apt Mirror
 
-Suite: `bookworm` (Debian 12 — matches `node:20-slim`, `python:3.x-slim` base images)
+Suite: `bookworm` (Debian 12 — matches `node:lts-slim`, `python:3.12-bookworm` base images)
 
 ```
 deb https://<REGISTRY_USER>:<REGISTRY_TOKEN>@${PACKAGE_REGISTRY_HOST}/${DEBIAN_REPO_PATH} bookworm main
@@ -94,18 +94,22 @@ deb https://<REGISTRY_USER>:<REGISTRY_TOKEN>@${PACKAGE_REGISTRY_HOST}/${DEBIAN_R
 
 `DEBIAN_REPO_PATH` Value includes the vendor prefix. See `environment.md` § Path Templates.
 
-### Merged apt + CA Cert Layer Pattern
+### Merged apt + CA Cert Layer Pattern (application Dockerfiles)
 
-**CRITICAL:** All apt operations MUST be in ONE merged `RUN` layer. Splitting causes build failure — a separate layer runs `apt-get update` against `deb.debian.org` which is blocked. The corporate apt mirror MUST be configured before any package install.
+**CRITICAL — application images:** All apt operations MUST be in ONE merged `RUN` layer. Splitting causes build failure — a separate layer runs `apt-get update` against `deb.debian.org` which is blocked. The corporate apt mirror MUST be configured before any package install.
 
-`Acquire::https::Verify-Peer=false` is required on both `update` and `install` — the corporate CA cert is not yet trusted when apt runs.
+This merged-layer rule is for **application** Dockerfiles that need apt packages and a CA in one go.
+
+**Tool-image exception:** `python-quality` corp and `groovy-lint` corp bootstrap the CA with `curl --insecure` first (public apt), then use the corp mirror. After `update-ca-certificates`, later apt MUST verify TLS. See those Dockerfiles — do not copy the merged Verify-Peer=false pattern into tool images that already trust the CA.
+
+`Acquire::https::Verify-Peer=false` is required on both `update` and `install` in the application pattern below — the corporate CA cert is not yet trusted when apt runs.
 
 ```dockerfile
 # One merged layer: disable default repos → corporate apt mirror → install packages → corporate CA cert
 # Acquire::https::Verify-Peer=false required: CA cert not trusted yet when apt runs against the registry
-ARG PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST>
-ARG DEBIAN_REPO_PATH=<DEBIAN_REPO_PATH>
-ARG CORP_CA_CERT_URL=<CORP_CA_CERT_URL>
+ARG PACKAGE_REGISTRY_HOST
+ARG DEBIAN_REPO_PATH
+ARG CORP_CA_CERT_URL
 RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     REGISTRY_USER=$(cat /run/secrets/username | cut -d@ -f1) && \
@@ -133,7 +137,7 @@ ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 **Rules:**
 - Disable default repos FIRST — never run `apt-get update` before the corporate apt mirror is configured
 - Remove `registry.list` after install — credentials MUST NOT persist in any layer
-- Debian suite MUST match base image (`bookworm` for `node:20-slim`, `python:3.x-bookworm`)
+- Debian suite MUST match base image (`bookworm` for `node:lts-slim`, `python:3.12-bookworm`)
 - All secrets via `--mount=type=secret` — NEVER `ARG` or `ENV`
 - CA cert URL MUST be `CORP_CA_CERT_URL` from `environment.md`
 - apt `deb` line MUST use `PACKAGE_REGISTRY_HOST` + `DEBIAN_REPO_PATH` from `environment.md` — NEVER hardcode `/artifactory/` or `/repository/`

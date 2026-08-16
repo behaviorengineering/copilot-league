@@ -10,6 +10,12 @@ user-invocable: false
 
 # DSPy module patterns (dspy-go)
 
+## When to Load
+
+Load when creating dspy-go modules, enabling XML structured output, wiring interceptors, or choosing module types (Predict, ChainOfThought, ReAct, Parallel).
+
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 DSPy-Go runs **in-process** as a Go library. Modules are the only supported path to LLM calls.
 
 ---

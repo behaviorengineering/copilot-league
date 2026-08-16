@@ -214,7 +214,9 @@ def get_remote_tracking_sha(repo_root: Path, branch: str) -> str | None:
     Returns:
         Full 40-character SHA string, or ``None`` if the tracking ref is absent.
     """
-    result = run_git(["rev-parse", "--verify", f"origin/{branch}"], cwd=repo_root, check=False)
+    result = run_git(
+        ["rev-parse", "--verify", f"origin/{branch}"], cwd=repo_root, check=False
+    )
     return result or None
 
 
@@ -240,9 +242,12 @@ def get_remote_branches(repo_root: Path) -> list[str]:
     branches: list[str] = []
     for line in raw.splitlines():
         stripped = line.strip()
-        if not stripped or "HEAD" in stripped:
+        if not stripped or " -> " in stripped:
             continue
-        branches.append(stripped.removeprefix("origin/"))
+        name = stripped.removeprefix("origin/")
+        if name == "HEAD":
+            continue
+        branches.append(name)
     return sorted(set(branches))
 
 
@@ -314,7 +319,7 @@ def _select_branch(branches: list[str], current: str) -> str | None:
 
 def cmd_update(
     submodule_root: Path, parent_root: Path | None, submodule_name: str
-) -> None:
+) -> bool:
     """Pull the latest commits on the current branch and update the parent pointer.
 
     Args:
@@ -322,14 +327,21 @@ def cmd_update(
         parent_root: Absolute path to the parent repository root, or ``None``
             when not inside a submodule.
         submodule_name: Relative path of the submodule within the parent repo.
+
+    Returns:
+        True when the update finished (including nothing-to-commit). False when
+        the user cancelled or HEAD is detached.
     """
     current = get_current_branch(submodule_root)
+    if current == "(detached HEAD)":
+        print("Error: detached HEAD — pin the commit or switch to a branch first.")
+        return False
     if not _confirm_and_reset(submodule_root):
-        return
+        return False
     print(f"Pulling latest on '{current}' in '{submodule_name}'...")
     out = _pull_with_recovery(submodule_root, current)
     if out is None:
-        return
+        return False
     print(out)
     local_sha = run_git(["rev-parse", "HEAD"], cwd=submodule_root)
     remote_sha = get_remote_tracking_sha(submodule_root, current)
@@ -348,16 +360,18 @@ def cmd_update(
             print(f"Reset to origin/{current}.")
         else:
             print("Skipped — submodule left at diverged state.")
+            return False
     if parent_root is not None:
         run_git(["add", submodule_name], cwd=parent_root)
         commit_msg = f"Update {submodule_name} submodule to latest '{current}'"
         commit_out = run_git(["commit", "-m", commit_msg], cwd=parent_root, check=False)
         print(commit_out or "Nothing to commit — submodule pointer already up to date.")
+    return True
 
 
 def cmd_switch_branch(
     submodule_root: Path, parent_root: Path | None, submodule_name: str
-) -> None:
+) -> bool:
     """Interactively pick a remote branch and switch the submodule to it.
 
     Args:
@@ -365,18 +379,21 @@ def cmd_switch_branch(
         parent_root: Absolute path to the parent repository root, or ``None``
             when not inside a submodule.
         submodule_name: Relative path of the submodule within the parent repo.
+
+    Returns:
+        True when the switch finished. False when cancelled or no branches.
     """
     branches = get_remote_branches(submodule_root)
     if not branches:
         print("No remote branches found.")
-        return
+        return False
     current = get_current_branch(submodule_root)
     selected = _select_branch(branches, current)
     if selected is None:
-        return
+        return False
     print(f"\nSwitching to '{selected}'...")
     if not _confirm_and_reset(submodule_root):
-        return
+        return False
     merge_head = _get_git_dir(submodule_root) / "MERGE_HEAD"
     if merge_head.exists():
         print("Warning: aborting in-progress merge before switching branch.")
@@ -390,12 +407,16 @@ def cmd_switch_branch(
     run_git(["reset", "--hard", f"origin/{selected}"], cwd=submodule_root)
     run_git(["clean", "-fd"], cwd=submodule_root)
     if parent_root is not None:
-        run_git(["submodule", "set-branch", "--branch", selected, submodule_name], cwd=parent_root)
+        run_git(
+            ["submodule", "set-branch", "--branch", selected, submodule_name],
+            cwd=parent_root,
+        )
         run_git(["add", ".gitmodules", submodule_name], cwd=parent_root)
         commit_msg = f"Pin {submodule_name} submodule to branch '{selected}'"
         commit_out = run_git(["commit", "-m", commit_msg], cwd=parent_root, check=False)
         print(commit_out or "Nothing to commit.")
     print(f"\nSubmodule '{submodule_name}' is now on '{selected}'.")
+    return True
 
 
 def cmd_pin_commit(
@@ -481,21 +502,25 @@ def interactive_menu(
     """
     while True:
         current_branch = get_current_branch(submodule_root)
-        menu_str = _build_menu(submodule_name, current_branch, show_pin=parent_root is not None)
+        menu_str = _build_menu(
+            submodule_name, current_branch, show_pin=parent_root is not None
+        )
         print(f"\n{menu_str}")
         choice = input("Choice: ").strip().lower()
+        succeeded = False
         if choice == "q":
             break
         if choice == "1":
-            cmd_update(submodule_root, parent_root, submodule_name)
+            succeeded = cmd_update(submodule_root, parent_root, submodule_name)
         elif choice == "2":
-            cmd_switch_branch(submodule_root, parent_root, submodule_name)
+            succeeded = cmd_switch_branch(submodule_root, parent_root, submodule_name)
         elif choice == "3" and parent_root is not None:
             cmd_pin_commit(submodule_root, parent_root, submodule_name)
+            succeeded = True
         else:
             print("Invalid choice.")
             continue
-        if parent_root is not None:
+        if succeeded and parent_root is not None:
             raw_push = input("\nPush to origin and exit? (y/N): ").strip().lower()
             if raw_push == "y":
                 push_to_origin(parent_root)

@@ -10,7 +10,15 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from dockerutil import FIXTURES, REPO_ROOT, run_checked, run_tool
+from dockerutil import (
+    FIXTURES,
+    REPO_ROOT,
+    combined_output,
+    published_host_port,
+    run_checked,
+    run_tool,
+    tls_flags,
+)
 
 pytestmark = pytest.mark.image
 
@@ -26,6 +34,7 @@ def python_quality_image(docker: str) -> str:
         [
             docker,
             "build",
+            *tls_flags(docker),
             "--target",
             "public",
             "-t",
@@ -44,6 +53,7 @@ def groovy_lint_image(docker: str) -> str:
         [
             docker,
             "build",
+            *tls_flags(docker),
             "--target",
             "public",
             "-t",
@@ -62,6 +72,7 @@ def jenkins_validator_image(docker: str) -> str:
         [
             docker,
             "build",
+            *tls_flags(docker),
             "-t",
             tag,
             str(REPO_ROOT / "agent-tools" / "jenkins-validator"),
@@ -92,22 +103,23 @@ def test_python_quality_lint_fails_on_untyped_file(
         ["lint", "--path", "/workspace/bad.py"],
     )
     assert result.returncode != 0
+    assert "mypy" in combined_output(result).lower()
 
 
 def test_python_quality_format_runs(
     docker: str, python_quality_image: str, tmp_path: Path
 ) -> None:
-    """format starts ruff fix/format on a copy so fixtures stay unchanged."""
-    (tmp_path / "ok.py").write_text(
-        (FIXTURES / "ok.py").read_text(encoding="utf-8"), encoding="utf-8"
-    )
+    """format rewrites an ugly file."""
+    ugly = tmp_path / "ugly.py"
+    ugly.write_text("x=1\n", encoding="utf-8")
     result = run_tool(
         docker,
         python_quality_image,
-        ["format", "--path", "/workspace/ok.py"],
+        ["format", "--path", "/workspace/ugly.py"],
         workspace=tmp_path,
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 0, combined_output(result)
+    assert ugly.read_text(encoding="utf-8") != "x=1\n"
 
 
 def test_python_quality_sec_code_passes_on_ok_file(
@@ -134,6 +146,45 @@ def test_python_quality_sec_secrets_passes_on_ok_file(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_python_quality_lint_fails_on_complex_fixture(
+    docker: str, python_quality_image: str
+) -> None:
+    """lint exits non-zero when radon reports rank C or worse."""
+    result = run_tool(
+        docker,
+        python_quality_image,
+        ["lint", "--path", "/workspace/complex_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "rank=" in combined_output(result)
+
+
+def test_python_quality_sec_code_fails_on_eval(
+    docker: str, python_quality_image: str
+) -> None:
+    """sec.code exits non-zero when bandit finds HIGH/MEDIUM issues."""
+    result = run_tool(
+        docker,
+        python_quality_image,
+        ["sec.code", "--path", "/workspace/bandit_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "Bandit" in combined_output(result)
+
+
+def test_python_quality_sec_secrets_fails_on_example_key(
+    docker: str, python_quality_image: str
+) -> None:
+    """sec.secrets exits non-zero on AWS's published example access key."""
+    result = run_tool(
+        docker,
+        python_quality_image,
+        ["sec.secrets", "--path", "/workspace/secret_fail.py"],
+    )
+    assert result.returncode != 0
+    assert "secret" in combined_output(result).lower()
+
+
 def test_groovy_lint_runs_on_fixture(docker: str, groovy_lint_image: str) -> None:
     """npm-groovy-lint starts and processes a tiny Groovy file."""
     result = run_tool(
@@ -152,6 +203,28 @@ def test_groovy_lint_runs_on_fixture(docker: str, groovy_lint_image: str) -> Non
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_groovy_lint_fails_on_bad_fixture(docker: str, groovy_lint_image: str) -> None:
+    """npm-groovy-lint exits non-zero on a parse error."""
+    result = run_tool(
+        docker,
+        groovy_lint_image,
+        [
+            "--path",
+            "/workspace",
+            "--files",
+            "bad.groovy",
+            "--no-insight",
+            "--failon",
+            "error",
+        ],
+    )
+    assert result.returncode != 0
+    assert (
+        "error" in combined_output(result).lower()
+        or "fail" in combined_output(result).lower()
+    )
+
+
 def _jenkins_api_ready(url: str) -> bool:
     """Return True when Jenkins ``/api/json`` returns JSON, not the boot page.
 
@@ -167,22 +240,6 @@ def _jenkins_api_ready(url: str) -> bool:
     except (urllib.error.URLError, TimeoutError, OSError):
         return False
     return body.lstrip().startswith("{")
-
-
-def _published_host_port(docker: str, name: str, container_port: int) -> int:
-    """Return the host port Docker published for a container port.
-
-    Args:
-        docker: Docker CLI name.
-        name: Running container name.
-        container_port: Port inside the container.
-
-    Returns:
-        Host port number.
-    """
-    result = run_checked([docker, "port", name, str(container_port)])
-    line = result.stdout.strip().splitlines()[0]
-    return int(line.rsplit(":", 1)[-1])
 
 
 def _wait_for_jenkins(docker: str, name: str, host_port: int, timeout_s: int) -> None:
@@ -260,7 +317,7 @@ def jenkins_validator_up(docker: str, jenkins_validator_image: str) -> Iterator[
                 jenkins_validator_image,
             ]
         )
-        host_port = _published_host_port(docker, name, _JENKINS_CONTAINER_PORT)
+        host_port = published_host_port(docker, name, _JENKINS_CONTAINER_PORT)
         _wait_for_jenkins(docker, name, host_port, _JENKINS_WAIT_SECONDS)
         yield host_port
     finally:

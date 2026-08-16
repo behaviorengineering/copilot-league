@@ -1,57 +1,76 @@
 ---
-description: "Use when asked to run Playwright, browse a page, click elements, fill forms, take screenshots, scrape content, or verify UI behaviour in the browser. Covers how to execute Playwright inline scripts using the repo's venv."
+applyTo: "**/*playwright*,**/e2e/**,**/*.spec.ts"
+description: "Use when asked to run Playwright, browse a page, click elements, fill forms, take screenshots, scrape content, or verify UI behaviour in the browser. Covers inline Python Playwright scripts using the consuming project's .venv."
 ---
 
 # Playwright Runner
 
 ## Execution environment
 
-Detect the OS before running. Use the appropriate venv Python binary:
+Resolve the repo root, then use that project's `.venv` Python. Do not hardcode a project path.
 
-**Windows:**
-```
-cd C:\path\to\post_creator_2\src\orchestrator
-C:\path\to\post_creator_2\.venv\Scripts\python.exe -c "<inline script>"
+```bash
+ROOT=$(git rev-parse --show-toplevel)
 ```
 
-Note: PowerShell does not support relative paths (e.g. `..\..\`) as command prefixes — always use the absolute path to the venv Python binary on Windows. Replace `C:\path\to\post_creator_2` with your actual repo root (e.g. use `git rev-parse --show-toplevel` to find it).
+**Windows (PowerShell):**
+```powershell
+$root = (git rev-parse --show-toplevel)
+& "$root\.venv\Scripts\python.exe" -c "<inline script>"
+```
+
+PowerShell does not support relative paths (e.g. `..\..\`) as command prefixes — always use the absolute path to the venv Python binary on Windows.
 
 **macOS / Linux:**
+```bash
+ROOT=$(git rev-parse --show-toplevel)
+"$ROOT/.venv/bin/python" -c "<inline script>"
 ```
-cd /path/to/post_creator_2/src/orchestrator
-../../.venv/bin/python -c "<inline script>"
-```
-
-To find the repo root on macOS, use `git rev-parse --show-toplevel` if the path is unknown.
 
 Use the bundled Chromium (no `executable_path` needed) and `headless=True` unless the user explicitly asks to see the browser.
+
+If `.venv` is missing, STOP and ask the user to create it. Do not invent a second Python.
 
 ## First-time setup (browser binaries)
 
 Playwright needs a separate step to download the Chromium binary. The package install alone is not enough.
 
-**With invoke (submodule present):**
-```
-invoke env.setup-browsers
-```
-
-**Without invoke (manual):**
 ```bash
-# 1. Install dependencies (playwright is already in pyproject.toml)
-uv sync
-
-# 2. Download Chromium
-playwright install chromium
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT"
+# playwright is a project dependency — install it the way the consuming project already does
+"$ROOT/.venv/bin/playwright" install chromium
 ```
 
-If on a corporate network with SSL inspection, set the cert before step 2.
+Windows:
 
-On a properly configured corporate machine, `SSL_CERT_FILE` is already set as a user env var (from the UV setup guide). Reuse it directly:
+```powershell
+$root = (git rev-parse --show-toplevel)
+& "$root\.venv\Scripts\playwright.exe" install chromium
+```
 
-- macOS/Linux: `NODE_EXTRA_CA_CERTS=$SSL_CERT_FILE playwright install chromium`
-- Windows: `$env:NODE_EXTRA_CA_CERTS = $env:SSL_CERT_FILE; playwright install chromium`
+If on a corporate network with SSL inspection, fetch the CA then install Chromium.
 
-If the user hits SSL errors and `SSL_CERT_FILE` is not set, ask them:
+Load `.github/agents/references/environment.md` (drop `.github/` in this library). Substitute `CORP_CA_CERT_URL`. If `SSL_CERT_FILE` is already set in the user environment, reuse it as `NODE_EXTRA_CA_CERTS` instead of downloading.
+
+**macOS / Linux:**
+```bash
+ROOT=$(git rev-parse --show-toplevel)
+curl --insecure -o /tmp/corp-ca.pem "$CORP_CA_CERT_URL"
+export NODE_EXTRA_CA_CERTS=/tmp/corp-ca.pem
+"$ROOT/.venv/bin/playwright" install chromium
+```
+
+**Windows (PowerShell):**
+```powershell
+$root = (git rev-parse --show-toplevel)
+$pem = Join-Path $env:TEMP "corp-ca.pem"
+Invoke-WebRequest -SkipCertificateCheck -Uri $env:CORP_CA_CERT_URL -OutFile $pem
+$env:NODE_EXTRA_CA_CERTS = $pem
+& "$root\.venv\Scripts\playwright.exe" install chromium
+```
+
+If the user hits SSL errors and `CORP_CA_CERT_URL` / `SSL_CERT_FILE` are unset, ask them:
 > "What is the path to your corporate SSL certificate file (e.g. `.pem` or `.crt`)?"
 
 Then use that path as the value for `NODE_EXTRA_CA_CERTS`. This is not a secret — it is a file path and safe to handle in the terminal.
@@ -95,6 +114,6 @@ Always `print()` results so they appear in terminal output. Return:
 
 ## Local app
 
-If the user's request targets the post_creator app:
-1. Check if a dev server is already running on `http://localhost:<port>`
-2. If not, ask the user to start it first — do not attempt to start it automatically
+If the request targets a local dev server:
+1. Check if a server is already running on the URL the user named
+2. If not, ask the user to start it first — do not start it automatically

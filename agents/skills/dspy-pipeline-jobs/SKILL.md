@@ -11,6 +11,12 @@ user-invocable: false
 
 # DSPy pipeline jobs
 
+## When to Load
+
+Load when adding a DSPy pipeline or job, wiring evaluators, implementing generate-evaluate-refine flows, or aligning existing code to the client-module pattern.
+
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 **Principle:** Each **job** is a generator with typed input, module definitions, client wrapper, evaluator chain, own versioned storage, and orchestrated refinement. Shared glue lives in `internal/dspy/runner` and `internal/orchestration`.
 
 ---
@@ -93,7 +99,7 @@ Implement `RefinementStrategy`: `LoadContext`, `GenerateAndEvaluate`, `SaveVersi
 
 ## Structured output in jobs
 
-- Apply `WithXMLFormatting` in module **Create\*** paths (see `agents/skills/dspy-module-patterns/SKILL.md`).
+- Apply `WithXMLFormatting` in module **Create\*** paths (see `.github/agents/skills/dspy-module-patterns/SKILL.md`).
 - One XML tag per field; lists via `<item>`; no JSON blobs for new jobs.
 - Client maps parsed `map[string]any` to typed structs — no second parse unless legacy.
 
@@ -114,5 +120,5 @@ Implement `RefinementStrategy`: `LoadContext`, `GenerateAndEvaluate`, `SaveVersi
 
 ## Additional resources
 
-- Evaluator tables, anti-fluff, CLI preview rules: `agents/references/dspy-pipeline-jobs.md`
-- XML/parser: `agents/skills/dspy-structured-xml-output/SKILL.md`
+- Evaluator tables, anti-fluff, CLI preview rules: `.github/agents/references/dspy-pipeline-jobs.md`
+- XML/parser: `.github/agents/skills/dspy-structured-xml-output/SKILL.md`

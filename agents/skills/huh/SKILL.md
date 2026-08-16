@@ -10,11 +10,19 @@ user-invocable: false
 
 Load when working with `charm.land/huh/v2` — building interactive terminal forms, prompts, selects, or multi-step wizards in Go.
 
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 ---
 
 ## Setup
 
-Clone into the workspace tmp directory:
+MUST load `.github/agents/references/environment.md` first. Set `GOPROXY` and `GONOSUMCHECK=*` from that overlay before any `go get` or `go mod download`. NEVER use a public Go proxy in a corporate environment.
+
+Prefer the consuming module's existing `charm.land/huh/v2` dependency. Clone GitHub into `tmp/` only as a fallback when the user asked for the example tree and GitHub is reachable. Do not invent an internal GitHub mirror.
+
+Clone commands below are bash or WSL. On native Windows PowerShell, set GOPROXY then `go get charm.land/huh/v2` in the consuming module — do not assume bash `git clone` works in cmd.exe.
+
+Fallback clone into the workspace tmp directory:
 
 ```bash
 git clone https://github.com/charmbracelet/huh tmp/huh

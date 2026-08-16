@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when writing or reviewing any `*.Jenkinsfile` or `pipeline { }` block.
 
+**Cited by:** `.github/agents/jenkins-coder.agent.md`
+
 MUST load `.github/agents/references/environment.md` before emitting registry hosts or credential IDs. `UPSTREAM_*_IMAGE` defaults use `DOCKER_PULL_DOMAIN` from that overlay.
 
 ## Core Constraints
@@ -223,7 +225,7 @@ stage('Calculate Image Tags') {
 Paired parameter:
 ```groovy
 string(name: 'UPSTREAM_PYTHON_IMAGE',
-    defaultValue: '<DOCKER_PULL_DOMAIN>/python:3.14-bookworm',
+    defaultValue: '<DOCKER_PULL_DOMAIN>/python:3.12-bookworm',
     description: 'Bootstrap image for Calculate Image Tags stage')
 ```
 

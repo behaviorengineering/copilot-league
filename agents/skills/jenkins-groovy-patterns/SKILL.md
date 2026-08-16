@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when writing or reviewing any `.groovy` file or `script {}` block in a Jenkinsfile.
 
+**Cited by:** `.github/agents/jenkins-coder.agent.md`
+
 ## Core Constraints
 
 **CONSTRAINT:** Inline `sh` commands in Jenkinsfiles MUST be extracted into named functions.

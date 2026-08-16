@@ -10,7 +10,11 @@ user-invocable: false
 
 # DSPy-Go debugging
 
-Use this skill when a module **fails validation**, returns **unexpected nil fields**, or a **refinement loop** exits early.
+## When to Load
+
+Load when a dspy-go module **fails validation**, returns **unexpected nil fields**, or a **refinement loop** exits early.
+
+**Cited by:** `.github/agents/golang-coder.agent.md`
 
 ---
 
@@ -107,5 +111,5 @@ Validation failure should trigger `RetryModuleInterceptor` within configured bud
 
 ## Additional resources
 
-- Module wiring: `agents/skills/dspy-module-patterns/SKILL.md`
-- Job/evaluator alignment: `agents/skills/dspy-pipeline-jobs/SKILL.md`
+- Module wiring: `.github/agents/skills/dspy-module-patterns/SKILL.md`
+- Job/evaluator alignment: `.github/agents/skills/dspy-pipeline-jobs/SKILL.md`

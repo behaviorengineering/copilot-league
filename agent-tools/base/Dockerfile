@@ -1,5 +1,6 @@
 # Corporate base image — certs, apt mirror
-# Corp tool images build FROM local-agent-tool-base
+# CA/apt primitive for debian-based corp tools. No current tool image
+# builds FROM this (python-quality corp uses python:3.12-bookworm).
 #
 # MUST pass --build-arg from agents/references/environment.md
 # (PACKAGE_REGISTRY_HOST, CORP_CA_CERT_URL, DEBIAN_REPO_PATH).
@@ -20,6 +21,7 @@ FROM ${BASE_IMAGE}
 ARG PACKAGE_REGISTRY_HOST
 ARG CORP_CA_CERT_URL
 ARG DEBIAN_REPO_PATH
+ARG DEBIAN_SUITE=bookworm
 
 # Step 1: Fetch corporate CA cert from the package registry
 # --insecure required — cert is not yet trusted at this point
@@ -37,13 +39,14 @@ RUN rm -f /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources \
 # Credentials embedded in deb URL — safe because sources.list is created and deleted
 # in the same RUN block and never committed to a layer. Token value comes only from
 # --mount=type=secret and never appears in image history.
+# CA is already in the trust store — do not disable TLS verify here.
 RUN --mount=type=secret,id=username \
     --mount=type=secret,id=token \
     USERNAME=$(cat /run/secrets/username | cut -d@ -f1) && \
     TOKEN=$(cat /run/secrets/token) && \
-    echo "deb https://${USERNAME}:${TOKEN}@${PACKAGE_REGISTRY_HOST}/${DEBIAN_REPO_PATH} bookworm main" \
+    echo "deb https://${USERNAME}:${TOKEN}@${PACKAGE_REGISTRY_HOST}/${DEBIAN_REPO_PATH} ${DEBIAN_SUITE} main" \
         > /etc/apt/sources.list.d/registry.list && \
-    apt-get -o "Acquire::https::Verify-Peer=false" update && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc g++ make git \
     && rm -rf /var/lib/apt/lists/* \

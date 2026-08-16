@@ -1,15 +1,16 @@
 # Local Tools — Windows Setup
 
-Load when a user asks how to set up Python, Go tools, install linters, or run quality checks locally on Windows.
+Load when a user asks how to set up **Go** tools on Windows, or how `GONOSUMCHECK` works in Windows `cmd` / Makefile recipes.
 
 MUST load [environment.md](./environment.md) first. `GOPROXY` below is the shipped placeholder — substitute the Value column when running or generating commands.
 
+This library does not ship a Makefile. `make tools`, `make preflight-proxy`, and `make registry-auth-check` are **consuming-project** contracts. GOLANG-CODER expects the task repo to provide them.
+
+Python quality MUST use the python-quality container. NEVER install or call ruff, mypy, radon, bandit, or detect-secrets on the Windows host. See [python-quality/SKILL.md](../skills/python-quality/SKILL.md).
+
 ## Table of Contents
 1. [Go Tools (registry-backed)](#go-tools-registry-backed)
-2. [Python via uv](#python-via-uv)
-3. [ruff](#ruff)
-4. [mypy](#mypy)
-5. [Lint Commands](#lint-commands)
+2. [Python quality (container only)](#python-quality-container-only)
 
 ---
 
@@ -25,15 +26,17 @@ go env -w GOPROXY="<GOPROXY>"
 $env:GONOSUMCHECK = "*"
 ```
 
-### Makefile Targets (preferred)
+### Makefile Targets (consuming project)
 
-Use `make tools` instead of running `go install` manually — it sets `GONOSUMCHECK` correctly in each recipe:
+If the consuming project ships these targets, use them instead of running `go install` manually — they set `GONOSUMCHECK` in each recipe:
 
 ```powershell
 make preflight-proxy       # confirm GOPROXY is the corporate registry from environment.md
-make artifactory-auth-check  # confirm credentials are valid
-make tools                 # installs all 8 tools with GONOSUMCHECK set
+make registry-auth-check  # confirm credentials are valid
+make tools                 # installs Go tooling with GONOSUMCHECK set
 ```
+
+This library has no Makefile. Do not invent those targets here.
 
 ### Manual Install (Windows cmd/make shell)
 
@@ -76,41 +79,12 @@ GONOSUMCHECK=* go install github.com/golangci/golangci-lint/cmd/golangci-lint@la
 
 ---
 
-## Python via uv
+## Python quality (container only)
 
-> Install instructions to be added — see Python + uv setup.
+**CONSTRAINT:** Python lint, format, mypy, radon, bandit, and detect-secrets MUST run inside the python-quality container. NEVER `uv tool install ruff` or `uv tool install mypy` on the Windows host. NEVER call those binaries from PATH.
 
----
-
-## ruff
+Load [python-quality/SKILL.md](../skills/python-quality/SKILL.md) and [local-tools-container.md](./local-tools-container.md). Detect `$CONTAINER`, set `$AGENT_TOOLS`, build the image, then:
 
 ```powershell
-uv tool install ruff
-```
-
-Verify: `ruff --version`
-
----
-
-## mypy
-
-```powershell
-uv tool install mypy
-```
-
-Verify: `mypy --version`
-
----
-
-## Lint Commands
-
-```powershell
-# Lint
-ruff check <file>
-
-# Format check
-ruff format --check <file>
-
-# Type check (strict)
-mypy --strict <file>
+& $CONTAINER run --rm -v "${PWD}:/workspace" python-quality lint --path /workspace/<file>
 ```

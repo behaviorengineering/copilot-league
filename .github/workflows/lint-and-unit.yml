@@ -1,0 +1,52 @@
+name: lint-and-unit
+
+on:
+  pull_request:
+    paths:
+      - "agents/**"
+      - "instructions/**"
+      - "scripts/**"
+      - "tests/**"
+      - "agent-tools/python-quality/**"
+      - "pyproject.toml"
+      - ".github/workflows/lint-and-unit.yml"
+  push:
+    branches: [main, master]
+    paths:
+      - "agents/**"
+      - "instructions/**"
+      - "scripts/**"
+      - "tests/**"
+      - "agent-tools/python-quality/**"
+      - "pyproject.toml"
+      - ".github/workflows/lint-and-unit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install lint and test tools
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check scripts tests agent-tools/python-quality
+
+      - name: Ruff format
+        run: ruff format --check scripts tests agent-tools/python-quality
+
+      - name: Mypy
+        run: mypy --strict --ignore-missing-imports scripts
+
+      - name: Unit tests
+        run: pytest tests -m "not image" -v

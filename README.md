@@ -4,14 +4,14 @@
 
 ## *Not all heroes wear capes. Some just know the rules.*
 
-Copilot League is a self-maintaining library of **VS Code GitHub Copilot** agents. Each agent is a specialised mode: a domain expert that enforces a specific standard (code style, pipeline structure, documentation clarity). The library stays coherent because every agent was authored and is maintained to the same foundational standard: the one defined by AGENT-SMITH.
+Copilot League is a library of **VS Code GitHub Copilot** agents. Each agent is a specialised mode: a domain expert that enforces a specific standard (code style, pipeline structure, documentation clarity). Every agent is authored and maintained to the AGENT-SMITH standard. A corp copy is fork-and-forget: fill `environment.md` once and evolve locally — no upstream-sync workflow.
 
 This library targets VS Code GitHub Copilot only. We do not ship Cursor rules, skills, or hooks.
 
 ## What You'll Learn
 
 **Getting Started:**
-- [What's Included](#whats-included) - Agents, personas, and instructions shipped with this library
+- [What's Included](#whats-included) - Agents, skills, instructions, references, and agent-tools
 - [Adding to a Project](#adding-to-a-project) - One-time corp copy, add as a `.github/` submodule
 - [Task Repo Workflow](#task-repo-workflow) - Run and edit agents from a project that holds the work
 
@@ -47,9 +47,37 @@ GitHub Copilot CLI uses the same `.github/agents/` files when run from the repo.
 
 ![VS Code agent list showing the agents in the Copilot chat panel](media/vscode-agent-list.png)
 
-**Instructions** (`.github/instructions/`) — `*.instructions.md` files with `applyTo` frontmatter. Workspace-wide rules use `applyTo: "**"` (for example `copilot.instructions.md`, `neurodivergent.instructions.md`).
+**Instructions** (`.github/instructions/`) — `*.instructions.md` files with `applyTo` frontmatter:
 
-**Personas** (`.github/agents/personas/`) — behavioural blueprints referenced by the agents.
+| File | `applyTo` | What it does |
+|---|---|---|
+| `copilot.instructions.md` | `**` | Scope consent, no unsolicited docs, agent-file awareness |
+| `neurodivergent.instructions.md` | `**` | Chat-only: direct answer first, optional labeled sections, short paragraphs |
+| `playwright-runner.instructions.md` | Playwright-shaped paths | Inline Playwright via the consuming project's `.venv` |
+
+**Personas** (`.github/agents/personas/`) — behavioural blueprints referenced by the agents: `intent-first.persona.md`, `consultant.persona.md`.
+
+**Skills** (`.github/agents/skills/<name>/SKILL.md`) — load-on-demand procedures cited by agents:
+
+| Domain | Skills |
+|---|---|
+| Python | `python-quality` |
+| Jenkins / Groovy | `groovy-lint`, `jenkins-pipeline-structure`, `jenkins-groovy-patterns`, `jenkins-docker-registry`, `jenkins-gitops-stages`, `jenkins-bash-scripts` |
+| Docs | `doc-cold-read`, `doc-revise` |
+| Go / DSPy | `dspy-structured-xml-output`, `dspy-module-patterns`, `dspy-pipeline-jobs`, `dspy-prompt-engineering`, `dspy-go-debugging`, `huh`, `scout` |
+
+**References** (`.github/agents/references/`) — pattern libraries: `environment.md`, `package-registries.md`, `python-patterns.md`, `golang-patterns.md`, `jenkins-patterns.md`, `jenkins-cps-dispatch.md`, `code-review-methodology.md`, `instruction-design-patterns.md`, `neurodivergent-formatting.md`, `local-tools-container.md`, `local-tools-groovy.md`, `local-tools-windows.md`, `dspy-xml-output.md`, `dspy-pipeline-jobs.md`. Templates live in `.github/agents/templates/` (`agent-template.md`, `reference-template.md`, `skill-template.md`).
+
+**Agent-tools** (`.github/agent-tools/`) — container images agents run instead of host installs:
+
+| Image | Public | Corp |
+|---|---|---|
+| `python-quality` | `python:3.12-bookworm` | `python:3.12-bookworm` + CA + corp pip |
+| `groovy-lint` | `node:lts-slim` | `node:lts-slim` + corp apt/npm |
+| `jenkins-validator` | Hub `jenkins/jenkins:lts-jdk17` (needs `updates.jenkins.io`) | No corp stage |
+| `base` | None | Certs + corp apt mirror |
+
+GitHub Actions corp smokes use Artifactory-shaped path placeholders from `environment.md`. Nexus orgs still pass `--build-arg` from their filled `environment.md`.
 
 ## 📦 Adding to a Project
 
@@ -59,7 +87,7 @@ Clone this repo, push it to corporate git **once**, then add that corp URL as a 
 
 ### Corporate Git Copy
 
-Run this once per organisation. After the push, the corp copy is **self-managed**. The org fills `environment.md`, evolves agents, and never needs to pull GitHub again. We do not document an upstream-sync workflow.
+Run this once per organisation. After the push, the corp copy is fork-and-forget. The org fills `environment.md`, evolves agents, and never needs to pull GitHub again. We do not document an upstream-sync workflow.
 
 Replace the corp URL with your internal git host (`AGENTS_GIT_URL` in `agents/references/environment.md`).
 
@@ -105,13 +133,13 @@ Run the manager from the project root:
 python .github/scripts/submodule.py
 ```
 
-It pulls or switches the library branch and commits the parent pointer.
+It updates or switches the library branch, can pin the current HEAD, and after a successful command asks whether to push the parent pointer.
 
 ## 🛠️ Task Repo Workflow
 
 We run these agents from a **task repo**: a consuming project that already has this library as the `.github` submodule. The workspace holds the work (application code, Jenkinsfiles, docs). VS Code GitHub Copilot loads agents and `applyTo` instructions from that project's `.github/`.
 
-The library is **self-maintaining**, but self-edits work from the task repo, not from this repo opened alone. AGENT-SMITH and DOC-EDITOR change files under `.github/agents/` in the submodule working tree. Commit those changes in the submodule, then push the corp copy (or run `python .github/scripts/submodule.py`).
+The library stays coherent because AGENT-SMITH authors and reviews `*.agent.md` files, references, and skills to the same standard. Self-edits run from the task repo, not from this repo opened alone. AGENT-SMITH changes files under `.github/agents/` in the submodule working tree. DOC-EDITOR edits technical docs in the task repo — it does not maintain the agent library. Commit submodule changes, then push the corp copy (or run `python .github/scripts/submodule.py`).
 
 We do not open this library as the only workspace when we want these agents in the picker. Paths and instructions resolve against the project root.
 
@@ -133,7 +161,7 @@ Most agents compose both: Intent-First confirms the goal, Consultant resolves ap
 
 ## ⚙️ How the Library Stays Consistent
 
-AGENT-SMITH is the meta-agent that defines the generic workflow, constraint language, and verification standards every other agent is held to. Every agent in this library was built by AGENT-SMITH, and any new agent goes through it before being added.
+AGENT-SMITH is the meta-agent that defines the generic workflow, constraint language, and verification standards every other agent is held to. Every agent in this library was built by AGENT-SMITH, and any new agent, reference, or skill goes through it before being added.
 
 Four standards apply to every agent:
 

@@ -10,11 +10,19 @@ user-invocable: false
 
 Load when working with `github.com/felixgeelhaar/scout` — browser automation, web scraping, CDP scripting, the `agent` package (AI-friendly Session API), or the MCP server binary.
 
+**Cited by:** `.github/agents/golang-coder.agent.md`
+
 ---
 
 ## Setup
 
-Clone into the workspace tmp directory:
+MUST load `.github/agents/references/environment.md` first. Set `GOPROXY` and `GONOSUMCHECK=*` from that overlay before any `go get` or `go mod download`. NEVER use a public Go proxy in a corporate environment.
+
+Prefer the consuming module's existing `github.com/felixgeelhaar/scout` dependency. Clone GitHub into `tmp/` only as a fallback when the user asked for the example tree and GitHub is reachable. Do not invent an internal GitHub mirror.
+
+Clone commands below are bash or WSL. On native Windows PowerShell, set GOPROXY then `go get github.com/felixgeelhaar/scout` in the consuming module — do not assume bash `git clone` works in cmd.exe.
+
+Fallback clone into the workspace tmp directory:
 
 ```bash
 git clone https://github.com/felixgeelhaar/scout tmp/scout
@@ -51,6 +59,7 @@ Run the AG-UI conversational browser (requires LLM API key):
 go run ./cmd/scout ui serve --provider=ollama --model=mistral   # local LLM
 go run ./cmd/scout ui serve --provider=claude                    # needs ANTHROPIC_API_KEY
 cd ui && npm install && npm run dev                               # Vue frontend at :3000
+# Corp: set npm registry from environment.md (PACKAGE_REGISTRY_HOST + NPM_VIRTUAL_PATH) before npm install. NEVER registry.npmjs.org.
 ```
 
 Debug a single integration test with `dlv`:

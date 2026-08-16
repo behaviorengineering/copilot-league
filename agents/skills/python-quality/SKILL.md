@@ -10,7 +10,11 @@ user-invocable: false
 
 Load when asked to lint, format, type-check, or security-scan Python locally.
 
-MUST load [local-tools-container.md](../../references/local-tools-container.md) first. Run **Runtime Detection** and set `$AGENT_TOOLS` from **Path Prefix** before any container command. MUST build `local-agent-tool-base` before this image.
+**Cited by:** `.github/agents/python-coder.agent.md`
+
+MUST load [local-tools-container.md](../../references/local-tools-container.md) first. Run **Runtime Detection** and set `$AGENT_TOOLS` from **Path Prefix** before any container command.
+
+This image is **not** `FROM local-agent-tool-base`. Public and corp both start from `python:3.12-bookworm`. Do not build the base first for python-quality.
 
 This skill is a **quality audit**. NEVER start Jenkins. NEVER run `invoke ci.*`. NEVER clone jenkins-python-ci.
 
@@ -40,14 +44,26 @@ $CONTAINER images --format '{{.Repository}}' | grep -F python-quality
 
 ## Step 2 — Build the Image
 
-Ensure `REGISTRY_USER` and `REGISTRY_TOKEN` are set. Pass `--build-arg` values from `agents/references/environment.md`.
+Pass `--build-arg` values from `.github/agents/references/environment.md` (drop `.github/` in this library).
+
+**Public** (GitHub CI, public PyPI — no secrets):
+
+```powershell
+& $CONTAINER build @TLS_FLAG --target public -t python-quality "$AGENT_TOOLS/python-quality"
+```
+
+```bash
+$CONTAINER build "${TLS_FLAG[@]}" --target public -t python-quality "$AGENT_TOOLS/python-quality"
+```
+
+**Corp** (default last stage). Ensure `REGISTRY_USER` and `REGISTRY_TOKEN` are set.
 
 ```powershell
 # PowerShell (Windows)
 & $CONTAINER build @TLS_FLAG `
     --build-arg PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST> `
+    --build-arg CORP_CA_CERT_URL=<CORP_CA_CERT_URL> `
     --build-arg PIP_INDEX_PATH=<PIP_INDEX_PATH> `
-    --build-arg DEBIAN_REPO_PATH=<DEBIAN_REPO_PATH> `
     --secret id=username,env=REGISTRY_USER `
     --secret id=token,env=REGISTRY_TOKEN `
     -t python-quality "$AGENT_TOOLS/python-quality"
@@ -57,8 +73,8 @@ Ensure `REGISTRY_USER` and `REGISTRY_TOKEN` are set. Pass `--build-arg` values f
 # bash (macOS / Linux)
 $CONTAINER build "${TLS_FLAG[@]}" \
     --build-arg PACKAGE_REGISTRY_HOST=<PACKAGE_REGISTRY_HOST> \
+    --build-arg CORP_CA_CERT_URL=<CORP_CA_CERT_URL> \
     --build-arg PIP_INDEX_PATH=<PIP_INDEX_PATH> \
-    --build-arg DEBIAN_REPO_PATH=<DEBIAN_REPO_PATH> \
     --secret id=username,env=REGISTRY_USER \
     --secret id=token,env=REGISTRY_TOKEN \
     -t python-quality "$AGENT_TOOLS/python-quality"
@@ -66,9 +82,9 @@ $CONTAINER build "${TLS_FLAG[@]}" \
 
 **Rules:**
 - MUST run from the repository root
-- MUST have `REGISTRY_USER` and `REGISTRY_TOKEN` set
+- Corp MUST have `REGISTRY_USER` and `REGISTRY_TOKEN` set. Public (`--target public`) does not.
 - MUST NOT proceed to Step 3 if the build exits non-zero
-- MUST build `local-agent-tool-base` first
+- NEVER build `local-agent-tool-base` for this image
 
 ## Step 3 — Run the Tool
 
@@ -102,14 +118,14 @@ $CONTAINER run --rm -v "$(pwd):/workspace" python-quality sec.code --path /works
 
 **detect-secrets:**
 ```powershell
-& $CONTAINER run --rm -v "${PWD}:/workspace" python-quality sec.secrets --path /workspace
+& $CONTAINER run --rm -v "${PWD}:/workspace" python-quality sec.secrets --path /workspace/<file>
 ```
 ```bash
-$CONTAINER run --rm -v "$(pwd):/workspace" python-quality sec.secrets --path /workspace
+$CONTAINER run --rm -v "$(pwd):/workspace" python-quality sec.secrets --path /workspace/<file>
 ```
 
 **Rules:**
 - MUST pass `--rm`
 - MUST mount the workspace as `/workspace`
-- MUST use the container — NEVER call ruff, mypy, bandit, or detect-secrets on the host
+- MUST use the container — NEVER call ruff, mypy, radon, bandit, or detect-secrets on the host
 - NEVER run pytest, `sec.deps`, or Jenkins from this skill

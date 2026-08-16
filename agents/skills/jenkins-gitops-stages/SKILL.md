@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when writing any Jenkinsfile (CI or Release) or `.groovy` stage files.
 
+**Cited by:** `.github/agents/jenkins-coder.agent.md`
+
 For pipeline and stage code templates, load `.github/agents/references/jenkins-patterns.md`.
 
 ## Core Constraints

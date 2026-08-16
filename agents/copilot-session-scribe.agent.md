@@ -1,6 +1,6 @@
 ---
 name: 📓 COPILOT-SESSION-SCRIBE
-description: Captures live session findings into tmp/scribe/ docs in PR-CHRONICLER-ready format
+description: Captures session findings into tmp/scribe/ for PR-CHRONICLER
 argument-hint: Tell me what you're working on and where to log it (existing tmp/scribe/ file or new one)
 ---
 
@@ -41,6 +41,8 @@ All output MUST be written to `tmp/scribe/` files in the current workspace.
 
 CORRECT: `tmp/scribe/decision-loaniq-client-testing-2026-06-12.md`
 PROHIBITED: `tmp/chronicles/loaniq-2026-06-18.md`, `loaniq-notes.md`
+
+PR-CHRONICLER (`.github/agents/pr-chronicler.agent.md`) **reads** `tmp/scribe/` as evidence when assembling a chronicle. Keep entries dated, cited, and headed so that agent can extract them. Do not write chronicles here.
 
 ---
 
@@ -295,6 +297,7 @@ Violation: STOP. Await confirmation.
 
 0. **Orient (MANDATORY — silent until ready):**
    - Load Intent-First persona: readFile `.github/agents/personas/intent-first.persona.md`
+   - When an approach fork appears: readFile `.github/agents/personas/consultant.persona.md`
    - Read the user's request
    - Identify: (a) what they are working on, (b) which `tmp/scribe/` file to target
    - If `tmp/scribe/` file is not clear: ask one question — "Which `tmp/scribe/` file should I log to, or should I create a new one?"

@@ -1,4 +1,4 @@
-"""Docker CLI helpers for agent-tool image smoke tests."""
+"""Docker/Podman CLI helpers for agent-tool image smoke tests."""
 
 from __future__ import annotations
 
@@ -14,22 +14,53 @@ CADDYFILE = Path(__file__).resolve().parent / "caddy" / "Caddyfile"
 
 
 def docker_cli() -> str:
-    """Return ``docker`` if the daemon is up, otherwise skip the test.
+    """Return podman or docker when a daemon is up, otherwise skip.
 
     Returns:
-        The docker executable name.
+        The engine executable name.
     """
-    if shutil.which("docker") is None:
-        pytest.skip("docker binary not on PATH")
-    result = subprocess.run(
-        ["docker", "info"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        pytest.skip("docker daemon is not running")
-    return "docker"
+    for binary in ("podman", "docker"):
+        if shutil.which(binary) is None:
+            continue
+        result = subprocess.run(
+            [binary, "info"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return binary
+    pytest.skip("neither podman nor docker daemon is running")
+
+
+def tls_flags(engine: str) -> list[str]:
+    """Return ``--tls-verify=false`` for Podman, else nothing.
+
+    Args:
+        engine: ``podman`` or ``docker``.
+
+    Returns:
+        Extra argv for pull/build.
+    """
+    if engine == "podman":
+        return ["--tls-verify=false"]
+    return []
+
+
+def published_host_port(engine: str, name: str, container_port: int) -> int:
+    """Return the host port published for a container port.
+
+    Args:
+        engine: Engine CLI name.
+        name: Running container name.
+        container_port: Port inside the container.
+
+    Returns:
+        Host port number.
+    """
+    result = run_checked([engine, "port", name, str(container_port)])
+    line = result.stdout.strip().splitlines()[0]
+    return int(line.rsplit(":", 1)[-1])
 
 
 def run_checked(
@@ -61,7 +92,7 @@ def run_checked(
 
 
 def run_tool(
-    docker: str,
+    engine: str,
     image: str,
     extra: list[str],
     workspace: Path = FIXTURES,
@@ -69,7 +100,7 @@ def run_tool(
     """Run a one-shot tool image with a directory mounted at /workspace.
 
     Args:
-        docker: Docker CLI name.
+        engine: Engine CLI name.
         image: Image tag.
         extra: Arguments after the image name.
         workspace: Host directory mounted at ``/workspace``.
@@ -79,7 +110,7 @@ def run_tool(
     """
     return subprocess.run(
         [
-            docker,
+            engine,
             "run",
             "--rm",
             "-v",
@@ -91,3 +122,15 @@ def run_tool(
         capture_output=True,
         text=True,
     )
+
+
+def combined_output(result: subprocess.CompletedProcess[str]) -> str:
+    """Join stdout and stderr for assertions.
+
+    Args:
+        result: Completed process.
+
+    Returns:
+        Combined text.
+    """
+    return (result.stdout or "") + (result.stderr or "")

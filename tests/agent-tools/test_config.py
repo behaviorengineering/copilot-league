@@ -37,6 +37,17 @@ def test_resolve_tool_config_prefers_workspace_file(
     assert resolved.resolve() == override.resolve()
 
 
+def test_resolve_tool_config_prefers_workspace_mypy_ini(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A mypy.ini in cwd wins over the image default."""
+    override = tmp_path / "mypy.ini"
+    override.write_text("[mypy]\npython_version = 3.12\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    resolved = resolve_tool_config("mypy.ini")
+    assert resolved.resolve() == override.resolve()
+
+
 def test_resolve_tool_config_falls_back_to_image_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -44,4 +55,14 @@ def test_resolve_tool_config_falls_back_to_image_default(
     monkeypatch.chdir(tmp_path)
     resolved = resolve_tool_config("ruff.toml")
     expected = REPO_ROOT / "agent-tools" / "python-quality" / "ruff.toml"
+    assert resolved.resolve() == expected.resolve()
+
+
+def test_resolve_tool_config_falls_back_to_image_mypy_ini(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing mypy.ini uses the copy next to tasks/."""
+    monkeypatch.chdir(tmp_path)
+    resolved = resolve_tool_config("mypy.ini")
+    expected = REPO_ROOT / "agent-tools" / "python-quality" / "mypy.ini"
     assert resolved.resolve() == expected.resolve()

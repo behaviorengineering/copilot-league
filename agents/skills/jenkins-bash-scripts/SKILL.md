@@ -10,6 +10,8 @@ user-invocable: false
 
 Load when writing or reviewing `.sh` scripts under `.jenkins/scripts/` or any project CI script.
 
+**Cited by:** `.github/agents/jenkins-coder.agent.md`, `.github/agents/python-coder.agent.md`
+
 For bash script code templates and patterns, load `.github/agents/references/jenkins-patterns.md` § Jenkins Bash Script Patterns.
 
 ## Core Constraints
