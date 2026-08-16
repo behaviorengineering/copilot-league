@@ -1,0 +1,19 @@
+[project]
+name = "copilot-league"
+version = "0.0.0"
+description = "VS Code GitHub Copilot agent library"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests/agent-tools"]
+markers = [
+    "image: builds and runs agent-tool container images (requires Docker)",
+    "corp: corp-stage builds against the Caddy package-registry double",
+]

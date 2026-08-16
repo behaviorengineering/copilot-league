@@ -1,0 +1,41 @@
+name: agent-tools-smoke
+
+on:
+  pull_request:
+    paths:
+      - "agent-tools/**"
+      - "tests/agent-tools/**"
+      - ".github/workflows/agent-tools-smoke.yml"
+      - "pyproject.toml"
+  push:
+    branches: [main, master]
+    paths:
+      - "agent-tools/**"
+      - "tests/agent-tools/**"
+      - ".github/workflows/agent-tools-smoke.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.repository == 'behaviorengineering/copilot-league'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Unit tests
+        run: pytest tests/agent-tools -m "not image" -v
+
+      - name: Image build and smoke
+        run: pytest tests/agent-tools -m image -v

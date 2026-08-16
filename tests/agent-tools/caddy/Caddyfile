@@ -1,0 +1,105 @@
+# Test double for PACKAGE_REGISTRY_HOST. Not Artifactory.
+# Path prefixes match environment.md shipped Artifactory placeholders.
+# Unauthenticated: /health and CORP_CA_CERT_URL. Everything else on :8443: basic_auth.
+#
+# :443 MITMs files.pythonhosted.org and registry.npmjs.org (stock Caddy, no
+# HTML rewrite). The Caddy container still resolves those names on the public
+# internet; docker build --add-host points the *build* at host-gateway.
+#
+# CORP_BASIC_HASH is a bcrypt hash passed at container start (Caddyfile `$`
+# would eat a literal hash).
+
+{
+	auto_https off
+	admin off
+	servers {
+		protocols h1
+	}
+}
+
+(corp_auth) {
+	basic_auth {
+		ci-user {$CORP_BASIC_HASH}
+	}
+}
+
+(access_log) {
+	log {
+		output stdout
+		format json
+	}
+}
+
+:8443 {
+	import access_log
+	tls /certs/cert.pem /certs/key.pem
+
+	handle /health {
+		respond "ok" 200
+	}
+
+	handle /artifactory/generic/security/certificates/corp-ca.pem {
+		root * /certs
+		rewrite * /ca.pem
+		header Content-Type application/x-pem-file
+		file_server
+	}
+
+	handle_path /artifactory/debian-repo/* {
+		import corp_auth
+		rewrite * /debian{path}
+		reverse_proxy https://deb.debian.org {
+			header_up Host deb.debian.org
+			header_up Authorization ""
+			flush_interval -1
+		}
+	}
+
+	handle_path /artifactory/api/pypi/pypi-virtual/simple* {
+		import corp_auth
+		rewrite * /simple{path}
+		reverse_proxy https://pypi.org {
+			header_up Host pypi.org
+			header_up Authorization ""
+		}
+	}
+
+	handle_path /artifactory/api/npm/npm-virtual/* {
+		import corp_auth
+		reverse_proxy https://registry.npmjs.org {
+			header_up Host registry.npmjs.org
+			header_up Authorization ""
+		}
+	}
+
+	respond "not a corp path" 404
+}
+
+:443 {
+	import access_log
+	tls /certs/cert.pem /certs/key.pem
+
+	@pypi_files host files.pythonhosted.org
+	handle @pypi_files {
+		reverse_proxy https://files.pythonhosted.org {
+			header_up Host files.pythonhosted.org
+			header_up Authorization ""
+			transport http {
+				tls_server_name files.pythonhosted.org
+			}
+		}
+	}
+
+	@npm_registry host registry.npmjs.org
+	handle @npm_registry {
+		reverse_proxy https://registry.npmjs.org {
+			header_up Host registry.npmjs.org
+			header_up Authorization ""
+			transport http {
+				tls_server_name registry.npmjs.org
+			}
+		}
+	}
+
+	respond "not a cdn host" 404
+}
