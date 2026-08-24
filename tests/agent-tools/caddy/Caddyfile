@@ -1,0 +1,97 @@
+# Test double for PACKAGE_REGISTRY_HOST. Not Artifactory.
+# Path prefixes match environment.md shipped Artifactory placeholders.
+# Unauthenticated: /health and CORP_CA_CERT_URL. Everything else on :8443: basic_auth.
+#
+# Wheel/tarball CDN URLs are rewritten by the host rewriter (REWRITE_UPSTREAM)
+# onto /pypi-files and /npm-tarballs on this vhost. No host :443 MITM.
+#
+# CORP_BASIC_HASH is a bcrypt hash passed at container start (Caddyfile `$`
+# would eat a literal hash).
+#
+# Production mirrors must not copy the /debian rewrite — it exists so this
+# double can reverse_proxy deb.debian.org.
+
+{
+	auto_https off
+	admin off
+	servers {
+		protocols h1
+	}
+}
+
+(corp_auth) {
+	basic_auth {
+		ci-user {$CORP_BASIC_HASH}
+	}
+}
+
+(access_log) {
+	log {
+		output stdout
+		format json
+	}
+}
+
+:8443 {
+	import access_log
+	tls /certs/cert.pem /certs/key.pem
+
+	handle /health {
+		respond "ok" 200
+	}
+
+	handle /artifactory/generic/security/certificates/corp-ca.pem {
+		root * /certs
+		rewrite * /ca.pem
+		header Content-Type application/x-pem-file
+		file_server
+	}
+
+	handle_path /artifactory/debian-repo/* {
+		import corp_auth
+		rewrite * /debian{path}
+		reverse_proxy https://deb.debian.org {
+			header_up Host deb.debian.org
+			header_up Authorization ""
+			flush_interval -1
+		}
+	}
+
+	handle /artifactory/api/pypi/pypi-virtual/simple* {
+		import corp_auth
+		reverse_proxy {$REWRITE_UPSTREAM} {
+			header_up Authorization ""
+		}
+	}
+
+	handle_path /pypi-files/* {
+		reverse_proxy https://files.pythonhosted.org {
+			header_up Host files.pythonhosted.org
+			header_up Authorization ""
+			transport http {
+				tls_server_name files.pythonhosted.org
+			}
+		}
+	}
+
+	handle /artifactory/api/npm/npm-virtual* {
+		import corp_auth
+		reverse_proxy {$REWRITE_UPSTREAM} {
+			header_up Authorization ""
+			header_up Host {http.reverse_proxy.upstream.hostport}
+			flush_interval -1
+		}
+	}
+
+	handle_path /npm-tarballs/* {
+		reverse_proxy https://registry.npmjs.org {
+			header_up Host registry.npmjs.org
+			header_up Authorization ""
+			transport http {
+				tls_server_name registry.npmjs.org
+			}
+		}
+	}
+
+	respond "not a corp path" 404
+}

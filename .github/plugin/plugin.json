@@ -1,0 +1,36 @@
+{
+  "name": "copilot-league",
+  "version": "0.0.0",
+  "agents": [
+    "agents/agent-smith.agent.md",
+    "agents/copilot-cli-specialist.agent.md",
+    "agents/copilot-session-scribe.agent.md",
+    "agents/doc-architect.agent.md",
+    "agents/doc-editor.agent.md",
+    "agents/git-specialist.agent.md",
+    "agents/golang-coder.agent.md",
+    "agents/jenkins-coder.agent.md",
+    "agents/pr-chronicler.agent.md",
+    "agents/python-coder.agent.md"
+  ],
+  "skills": [
+    "agents/skills/doc-cold-read",
+    "agents/skills/doc-revise",
+    "agents/skills/dspy-go-debugging",
+    "agents/skills/dspy-module-patterns",
+    "agents/skills/dspy-pipeline-jobs",
+    "agents/skills/dspy-prompt-engineering",
+    "agents/skills/dspy-structured-xml-output",
+    "agents/skills/groovy-lint",
+    "agents/skills/huh",
+    "agents/skills/jenkins-bash-scripts",
+    "agents/skills/jenkins-docker-registry",
+    "agents/skills/jenkins-gitops-stages",
+    "agents/skills/jenkins-groovy-patterns",
+    "agents/skills/jenkins-pipeline-structure",
+    "agents/skills/python-quality",
+    "agents/skills/scout"
+  ],
+  "hooks": [],
+  "mcpServers": []
+}
